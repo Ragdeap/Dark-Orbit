@@ -1136,9 +1136,12 @@
     ctx.strokeStyle = 'rgba(120,160,255,0.5)';
     ctx.strokeRect(mx + 0.5, my + 0.5, mw - 1, mh - 1);
     ctx.strokeRect(ox, oy, z.w * s, z.h * s);
+    // Todos los NPC se ven como un punto rojo, sin importar su tipo
+    ctx.fillStyle = '#ff3b3b';
     for (const a of g.aliens) {
-      ctx.fillStyle = ALIEN[a.type].color;
-      ctx.fillRect(ox + a.x * s - 1.5, oy + a.y * s - 1.5, 3, 3);
+      ctx.beginPath();
+      ctx.arc(ox + a.x * s, oy + a.y * s, 1.5, 0, Math.PI * 2);
+      ctx.fill();
     }
     const portal = portalOf(g.zi);
     if (portal) {
