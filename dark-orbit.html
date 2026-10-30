@@ -891,6 +891,10 @@
     ctx.fillText(`MUNICIÓN ${AMMO[p.ammo].name}`, 16, 98);
     ctx.fillText(`EXP ${g.exp}   HONOR ${g.honor}   URIDIUM ${g.uridium}`, 16, 116);
     ctx.fillText(`PROMETIUM ${g.cargo.prometium}   TERBIUM ${g.cargo.terbium}`, 16, 134);
+    if (!storageOk) {
+      ctx.fillStyle = '#ff9f1a';
+      ctx.fillText('Progreso no guardado: el navegador bloquea localStorage', 16, 152);
+    }
 
     // Derecha arriba: misión y mejoras
     ctx.textAlign = 'right';
@@ -1339,6 +1343,45 @@
     if (u) buyUpgrade(u);
   });
 
+  // ---------- Guardado ----------
+  // El progreso se guarda en el navegador (localStorage) y se restaura al abrir el juego
+  const SAVE_KEY = 'dark-orbit-save';
+  const SAVE_EVERY = 5;   // segundos entre guardados automáticos
+  let saveT = 0;
+  let storageOk = true;   // false si el navegador no deja usar localStorage
+
+  function saveGame() {
+    const p = g.p;
+    const data = {
+      zi: g.zi, x: p.x, y: p.y, hp: p.hp, maxHp: p.maxHp, shield: p.shield,
+      damage: p.damage, speed: p.speed, ammo: p.ammo,
+      up: g.up, credits: g.credits, uridium: g.uridium, exp: g.exp, honor: g.honor,
+      cargo: g.cargo, mission: g.mission, kills: g.kills,
+      shipId: g.shipId, equip: g.equip, generators: g.generators,
+    };
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (err) { storageOk = false; }
+  }
+
+  // Devuelve false si no hay progreso guardado válido; entonces se empieza de cero
+  function loadGame() {
+    let d;
+    try { d = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (err) { storageOk = false; return false; }
+    if (!d || !ZONES[d.zi] || !SHIPS[d.shipId]) return false;
+    g = newState();
+    g.zi = d.zi; g.zone = ZONES[d.zi];
+    g.shipId = d.shipId; g.equip = d.equip; g.generators = d.generators;
+    g.up = d.up; g.credits = d.credits; g.uridium = d.uridium; g.exp = d.exp; g.honor = d.honor;
+    g.cargo = d.cargo; g.mission = d.mission; g.kills = d.kills;
+    const p = g.p;
+    p.x = d.x; p.y = d.y; p.maxHp = d.maxHp; p.hp = d.hp > 0 ? d.hp : d.maxHp;
+    p.damage = d.damage; p.speed = d.speed;
+    if (AMMO[d.ammo]) p.ammo = d.ammo;
+    // Escudo: la capacidad sale de los generadores equipados; la reserva se limita a ella
+    const st = shieldStats();
+    p.maxShield = st.max; p.absorb = st.absorb; p.shield = Math.min(d.shield, st.max);
+    return true;
+  }
+
   // ---------- Bucle principal ----------
   let last = performance.now();
   function frame(now) {
@@ -1346,10 +1389,13 @@
     last = now;
     if (!g.paused && !g.hangar.open) update(dt);
     draw();
+    saveT += dt;
+    if (saveT >= SAVE_EVERY) { saveT = 0; saveGame(); }
     requestAnimationFrame(frame);
   }
 
-  reset();
+  if (!loadGame()) reset();
+  addEventListener('pagehide', saveGame);
   requestAnimationFrame(frame);
 })();
 </script>
