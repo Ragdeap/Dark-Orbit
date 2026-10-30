@@ -57,6 +57,35 @@
     },
   ];
 
+  // Niveles del jugador (32). PE necesaria para el nivel N = 10000 * 2^(N - 2); el nivel 1 empieza en 0 PE.
+  // unlock: lo que se desbloquea al alcanzar el nivel (los modificadores de la derecha aún no se implementan)
+  const MAX_LEVEL = 32;
+  const LEVEL_UNLOCKS = {
+    1: 'Acceso a mapas base X-1 y X-2',
+    2: 'Mapas X-3 y X-4',
+    3: 'Salto directo entre X-3 y X-4',
+    5: 'Acceso a mapas X-3 y X-4 enemigos',
+    7: 'Restricción del 50 % de carga en base X-1',
+    8: 'Mapas PvP (4-1, 4-2, 4-3)',
+    9: 'Mapa PvP (4-4)',
+    10: 'Mapa X-5',
+    11: 'Mapas X-6 y X-7',
+    12: 'Mapa X-8 (propia empresa)',
+    13: 'Mapas X-2 enemigos',
+    14: 'Mapas X-5 enemigos',
+    15: 'Mapas X-6 y X-7 enemigos',
+    16: 'Mapas X-1 enemigos',
+    17: 'Mapas X-8 enemigos (todos los mapas clásicos desbloqueados)',
+    24: 'Mapas Black Light (BL) / acceso total al contenido actual del juego',
+  };
+  const levelExp = n => (n <= 1 ? 0 : 10000 * 2 ** (n - 2));
+  // Nivel que corresponde a una cantidad de PE
+  const levelFor = exp => {
+    let n = 1;
+    while (n < MAX_LEVEL && exp >= levelExp(n + 1)) n++;
+    return n;
+  };
+
   // Recompensa solo en créditos (provisional para los NPC cuyas recompensas aún no están confirmadas)
   const money = credits => ({ exp: 0, honor: 0, credits, uridium: 0, cargo: null });
 
@@ -206,7 +235,7 @@
       missionOpen: false, missionTab: 'summary', stationOpen: false,
       naveOpen: false, navePos: null,
       playerOpen: false, playerPos: null, playerId: String(Math.floor(10000000 + Math.random() * 90000000)),
-      level: 1, teleportBonus: 0, lootKeys: 0,
+      teleportBonus: 0, lootKeys: 0,
       safeT: 0, wasSafe: false,
       shipId: 'PHOENIX',
       equip: { PHOENIX: ['LF1'] },
@@ -1283,7 +1312,7 @@
     ctx.moveTo(c.x + c.w - 5, c.y + 5); ctx.lineTo(c.x + 5, c.y + c.h - 5);
     ctx.stroke();
     // Columna izquierda: identificador, experiencia, nivel y honor
-    const left = [['id', g.playerId], ['exp', formatNum(g.exp)], ['level', g.level], ['honor', formatNum(g.honor)]];
+    const left = [['id', g.playerId], ['exp', formatNum(g.exp)], ['level', levelFor(g.exp)],['honor', formatNum(g.honor)]];
     // Columna derecha: créditos, uridium, bonos de teleportación y llaves de botín
     const right = [['credits', formatNum(g.credits)], ['uridium', formatNum(g.uridium)], ['teleport', formatNum(g.teleportBonus)], ['keys', formatNum(g.lootKeys)]];
     const rowY = i => b.y + 48 + i * 20;
