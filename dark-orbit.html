@@ -132,22 +132,23 @@
   };
 
   // Bots aliados (VRU): jugadores simulados que no atacan ni son atacados. Solo están en 3-1 y 3-2.
-  // exp y honor son valores de prueba; el nivel se calcula con levelFor igual que el del jugador.
+  // Empiezan de cero, igual que el jugador. Su exp y honor se guardan en data/save.json y el nivel se calcula con levelFor.
   const BOT_SIGHT = 900;          // distancia a la que el bot detecta un NPC
   const BOT_RANGE = 350;          // alcance de disparo del bot
   const BOT_COOL = 0.8;           // segundos entre disparos
   const BOT_LASER = 'LF1';        // láser equipado por los bots; de momento cualquiera, el de la Fénix por defecto
   const BOT_BULLET_SPEED = 900;
   const BOT_RESPAWN = 3;          // segundos hasta reaparecer en la base, igual que la nave
+  const DEATH_HONOR_LOSS = 0.04;  // fracción del honor que se pierde al morir (bots y jugador)
   const BOT_RADIUS = 16;
   // Nave de los bots: deben ser naves reales del juego. De momento solo la Fénix (la de administrador no es legal)
   const BOT_SHIP = 'PHOENIX';
   const BOTS = [
-    { name: 'Blade', zone: '3-1', x: 36000, y: 20000, exp: 25000, honor: 120 },
-    { name: 'Joker', zone: '3-1', x: 30000, y: 16000, exp: 6000, honor: 40 },
-    { name: 'Phantom', zone: '3-1', x: 34000, y: 22000, exp: 12000, honor: 60 },
-    { name: 'Black', zone: '3-2', x: 8000, y: 12000, exp: 90000, honor: 380 },
-    { name: 'Kaelith', zone: '3-2', x: 12000, y: 18000, exp: 3000, honor: 15 },
+    { name: 'Blade', zone: '3-1', x: 36000, y: 20000 },
+    { name: 'Joker', zone: '3-1', x: 30000, y: 16000 },
+    { name: 'Phantom', zone: '3-1', x: 34000, y: 22000 },
+    { name: 'Black', zone: '3-2', x: 8000, y: 12000 },
+    { name: 'Kaelith', zone: '3-2', x: 12000, y: 18000 },
   ];
 
   // Base de datos de naves. Para añadir una nave basta con añadir una entrada aquí;
@@ -264,7 +265,7 @@
       },
       up: { dmg: 0, hp: 0, spd: 0 },
       zi: 0, zone: ZONES[0],
-      aliens: [], bullets: [], enemyShots: [], pickups: [], parts: [], texts: [],
+      aliens: [], world: {}, bullets: [], enemyShots: [], pickups: [], parts: [], texts: [],
       stars: Array.from({ length: 260 }, () => ({ x: Math.random(), y: Math.random(), z: rnd(0.2, 1) })),
       credits: 0, uridium: 0, exp: 0, honor: 0, cargo: Object.fromEntries(MATERIALS.map(m => [m.key, 0])),
       refine: Object.fromEntries(REFINE_MATERIALS.map(m => [m.key, 0])),
@@ -280,7 +281,7 @@
       generators: {},
       hangar: { open: false, sel: { type: 'laser', i: 0 } },
       allies: BOTS.map((b, i) => ({
-        id: i, name: b.name, zi: ZONES.findIndex(z => z.id === b.zone), exp: b.exp, honor: b.honor,
+        id: i, name: b.name, zi: ZONES.findIndex(z => z.id === b.zone), exp: 0, honor: 0,
         x: b.x, y: b.y, angle: 0, tx: b.x, ty: b.y, portal: false, target: null, cool: 0, wait: 0, hopT: rnd(30, 90),
         hp: SHIPS[BOT_SHIP].hp, maxHp: SHIPS[BOT_SHIP].hp, speed: SHIPS[BOT_SHIP].speed, dead: false, respawnT: 0,
         // isPlayer: los bonus de láser contra jugadores (LF-4 Magmadrill) también les afectan
@@ -294,11 +295,22 @@
     setZone(0);
   }
 
+  // NPC de un mapa para guardar (sólo lo que hace falta para volver a encontrarlos) y para restaurarlos
+  function saveAliens(list) {
+    return list.map(a => ({ type: a.type, x: a.x, y: a.y, home: a.home, hp: a.hp, shield: a.shield }));
+  }
+  function restoreAliens(list) {
+    return (list || []).filter(a => ALIEN[a.type]).map(a => ({
+      ...a, vx: 0, vy: 0, aggro: false, cool: rnd(0.5, 1.5), wa: 0, wt: 0, hit: 0,
+    }));
+  }
+
   // Cambia de mapa. Sin "spawn" la nave aparece en la base; si se cruza una puerta, junto a su enlace
   function setZone(i, spawn) {
+    if (g.zone) g.world[g.zone.id] = saveAliens(g.aliens);
     g.zi = i;
     g.zone = ZONES[i];
-    g.aliens = []; g.bullets = []; g.enemyShots = []; g.pickups = []; g.parts = [];
+    g.aliens = restoreAliens(g.world[g.zone.id]); g.bullets = []; g.enemyShots = []; g.pickups = []; g.parts = [];
     const p = g.p;
     const at = spawn || g.zone.base;
     p.x = at.x; p.y = at.y;
@@ -431,7 +443,11 @@
     explode(a.x, a.y, t.r, t.color);
     soundAt(a.x, a.y, playExplosionSound);
     if (g.p.target === a) { g.p.target = null; g.p.attacking = false; }
-    if (by !== g.p) return;
+    if (by !== g.p) {
+      // Los bots ganan lo mismo que el jugador por cada NPC destruido
+      if (by.isBot) { by.exp += t.rewards.exp; by.honor += t.rewards.honor; }
+      return;
+    }
     const r = t.rewards;
     g.credits += r.credits;
     g.uridium += r.uridium;
@@ -516,6 +532,7 @@
       p.dead = true;
       p.respawnT = 3;
       p.target = null; p.tx = null; p.attacking = false;
+      g.honor -= Math.floor(g.honor * DEATH_HONOR_LOSS);
       explode(p.x, p.y, 22, '#7fd6ff');
     }
   }
@@ -1001,6 +1018,7 @@
     if (b.hp <= 0) {
       b.hp = 0; b.dead = true; b.respawnT = BOT_RESPAWN;
       b.target = null; b.portal = false; b.hostile = false;
+      b.honor -= Math.floor(b.honor * DEATH_HONOR_LOSS);
       explode(b.x, b.y, 22, '#6fe39a');
     }
   }
@@ -2654,6 +2672,8 @@
       cargo: g.cargo, refine: g.refine, missions: g.missions, nextMission: g.nextMission, missionPos: g.missionPos,
       playerId: g.playerId, playerPos: g.playerPos, navePos: g.navePos, teleportBonus: g.teleportBonus, lootKeys: g.lootKeys,
       shipId: g.shipId, equip: g.equip, generators: g.generators,
+      bots: g.allies.map(b => ({ name: b.name, zi: b.zi, x: b.x, y: b.y, exp: b.exp, honor: b.honor })),
+      world: { ...g.world, [g.zone.id]: saveAliens(g.aliens) },
     };
     fetch('/api/save', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), keepalive: true })
       .then(r => { storageOk = r.ok; }, () => { storageOk = false; });
@@ -2669,6 +2689,8 @@
     if (!d || !ZONES[d.zi] || !SHIPS[d.shipId]) return false;
     g = newState();
     g.zi = d.zi; g.zone = ZONES[d.zi];
+    g.world = d.world || {};
+    g.aliens = restoreAliens(g.world[g.zone.id]);
     g.shipId = d.shipId; g.equip = d.equip; g.generators = d.generators;
     g.up = d.up; g.credits = d.credits; g.uridium = d.uridium; g.exp = d.exp; g.honor = d.honor;
     g.cargo = { ...g.cargo, ...d.cargo };
@@ -2687,6 +2709,12 @@
     // Escudo: la capacidad sale de los generadores equipados; la reserva se limita a ella
     const st = shieldStats();
     p.maxShield = st.max; p.absorb = st.absorb; p.shield = Math.min(d.shield, st.max);
+    // Progreso de los bots, emparejado por nombre; los que no estén en el guardado empiezan de cero
+    for (const s of Array.isArray(d.bots) ? d.bots : []) {
+      const b = g.allies.find(x => x.name === s.name);
+      if (!b || !ZONES[s.zi]) continue;
+      b.zi = s.zi; b.x = b.tx = s.x; b.y = b.ty = s.y; b.exp = s.exp; b.honor = s.honor;
+    }
     return true;
   }
 
