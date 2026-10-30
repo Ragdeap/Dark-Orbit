@@ -102,12 +102,20 @@
     UCB100: { name: 'UCB-100', mult: 4, cool: 0.25, speed: 900, life: 1.0, shots: 1, spread: 0, color: '#fff7c2' },
     RSB75:  { name: 'RSB-75',  mult: 6, cool: 0.25, speed: 900, life: 1.0, shots: 1, spread: 0, color: '#ff9f1a' },
   };
-  // Barra de acción: 10 casillas. De momento solo las 5 primeras tienen munición.
+  // Misiles: se seleccionan con su casilla y se disparan con Espacio. Daño fijo, sin dispersión.
+  // Velocidad, tiempo de vida y color son provisionales.
+  const MISSILES = {
+    R310:    { name: 'R310',     dmg: 1000, cool: 1, speed: 700, life: 2.5, color: '#9be7ff' },
+    PLT2026: { name: 'PLT-2026', dmg: 2000, cool: 1, speed: 700, life: 2.5, color: '#7dd3fc' },
+    PLT2021: { name: 'PLT-2021', dmg: 4000, cool: 1, speed: 700, life: 2.5, color: '#38bdf8' },
+    PLT3030: { name: 'PLT-3030', dmg: 6000, cool: 1, speed: 700, life: 2.5, color: '#0ea5e9' },
+  };
+  // Barra de acción: 10 casillas. Las 5 primeras son láseres (munición); las 4 siguientes son misiles.
   // attack: la casilla inicia el ataque si hay un NPC fijado (en el futuro habrá casillas sin ataque)
   const BAR = [
     { ammo: 'LCB10', attack: true }, { ammo: 'MCB25', attack: true }, { ammo: 'MCB50', attack: true },
     { ammo: 'UCB100', attack: true }, { ammo: 'RSB75', attack: true },
-    null, null, null, null, null,
+    { missile: 'R310' }, { missile: 'PLT2026' }, { missile: 'PLT2021' }, { missile: 'PLT3030' }, null,
   ];
   const BAR_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'];
   const SLOT = 60, GAP = 8;
@@ -154,7 +162,7 @@
         x: 0, y: 0, vx: 0, vy: 0, angle: 0, speed: SHIPS.PHOENIX.speed,
         hp: SHIPS.PHOENIX.hp, maxHp: SHIPS.PHOENIX.hp,
         shield: 0, maxShield: 0, absorb: 0,
-        damage: 0, cool: 0, ammo: 'LCB10',  // damage: bonus de las mejoras, se suma al de los láseres
+        damage: 0, cool: 0, ammo: 'LCB10', missile: null, missCool: 0,  // damage: bonus de las mejoras, se suma al de los láseres
         target: null, tx: null, ty: null, dead: false, respawnT: 0,
         attacking: false,
       },
@@ -429,6 +437,77 @@
     }
   }
 
+  // Lanzamiento de misil: silbido de ruido filtrado que sube de tono (igual para todos los misiles)
+  function playMissileLaunchSound() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const ctx = audioCtx, t = ctx.currentTime;
+      const len = Math.floor(ctx.sampleRate * 0.5);
+      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.Q.value = 1.5;
+      filter.frequency.setValueAtTime(300, t);
+      filter.frequency.exponentialRampToValueAtTime(2200, t + 0.4);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.25, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+      src.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+      src.start(t);
+      src.stop(t + 0.5);
+    } catch (e) {
+      // Sin audio disponible: el juego sigue funcionando
+    }
+  }
+
+  // Impacto de misil: estallido corto de ruido que se cierra en graves, con un golpe grave debajo
+  function playMissileImpactSound() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const ctx = audioCtx, t = ctx.currentTime;
+      const len = Math.floor(ctx.sampleRate * 0.6);
+      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(1800, t);
+      filter.frequency.exponentialRampToValueAtTime(150, t + 0.5);
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.5, t);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+      src.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(ctx.destination);
+      src.start(t);
+      src.stop(t + 0.6);
+
+      const thump = ctx.createOscillator();
+      const thumpGain = ctx.createGain();
+      thump.type = 'sine';
+      thump.frequency.setValueAtTime(90, t);
+      thump.frequency.exponentialRampToValueAtTime(40, t + 0.4);
+      thumpGain.gain.setValueAtTime(0.4, t);
+      thumpGain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+      thump.connect(thumpGain);
+      thumpGain.connect(ctx.destination);
+      thump.start(t);
+      thump.stop(t + 0.4);
+    } catch (e) {
+      // Sin audio disponible: el juego sigue funcionando
+    }
+  }
+
   // Explosión de un NPC en el espacio: sin aire no hay soplido, así que se combina
   // un chasquido seco al inicio con un retumbo grave que se apaga despacio
   function playExplosionSound() {
@@ -502,6 +581,25 @@
     }
   }
 
+  // Dispara el misil seleccionado contra el NPC fijado (teledirigido). Igual que los láseres, necesita
+  // objetivo fijado y que esté dentro del alcance (RANGE).
+  function fireMissile() {
+    const p = g.p;
+    const t = p.target && p.target.hp > 0 ? p.target : null;
+    if (!p.missile || p.dead || p.missCool > 0 || !t) return;
+    if (dist(p.x, p.y, t.x, t.y) > RANGE) return;
+    const m = MISSILES[p.missile];
+    const ang = Math.atan2(t.y - p.y, t.x - p.x);
+    p.missCool = m.cool;
+    playMissileLaunchSound();
+    g.bullets.push({
+      x: p.x + Math.cos(ang) * 18, y: p.y + Math.sin(ang) * 18,
+      vx: Math.cos(ang) * m.speed, vy: Math.sin(ang) * m.speed,
+      life: m.life, dmg: m.dmg, color: m.color, missile: true,
+      homing: true, turn: 5, target: t,
+    });
+  }
+
   function buyUpgrade(u) {
     const cost = upgradeCost(g.up[u.lvl]);
     if (g.credits < cost) { showBanner('Créditos insuficientes'); return; }
@@ -551,6 +649,7 @@
     const p = g.p, z = g.zone;
     if (p.target && p.target.hp <= 0) { p.target = null; p.attacking = false; }
     p.cool -= dt;
+    p.missCool = Math.max(0, p.missCool - dt);
 
     // Con el botón pulsado, el destino sigue al cursor
     if (mouse.holding) { p.tx = mouse.x - W / 2 + p.x; p.ty = mouse.y - H / 2 + p.y; }
@@ -634,22 +733,37 @@
     g.aliens = g.aliens.filter(a => a.hp > 0);
   }
 
+  // Distancia de un punto (x, y) al segmento (x1, y1)-(x2, y2)
+  function segDist(x, y, x1, y1, x2, y2) {
+    const dx = x2 - x1, dy = y2 - y1;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 ? clamp(((x - x1) * dx + (y - y1) * dy) / len2, 0, 1) : 0;
+    return Math.hypot(x1 + dx * t - x, y1 + dy * t - y);
+  }
+
   function updateBullets(dt) {
     for (const b of g.bullets) {
       if (b.homing && b.target && b.target.hp > 0) {
         const ang = Math.atan2(b.target.y - b.y, b.target.x - b.x);
         const cur = Math.atan2(b.vy, b.vx);
         const diff = Math.atan2(Math.sin(ang - cur), Math.cos(ang - cur));
-        const na = cur + clamp(diff, -3 * dt, 3 * dt);
+        const na = cur + clamp(diff, -b.turn * dt, b.turn * dt);
         const sp = Math.hypot(b.vx, b.vy);
         b.vx = Math.cos(na) * sp; b.vy = Math.sin(na) * sp;
       }
+      const px = b.x, py = b.y;
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
       if (b.life <= 0) continue;
+      // Se comprueba el tramo recorrido en el frame, para que un proyectil rápido no atraviese al NPC
       for (const a of g.aliens) {
-        if (a.hp > 0 && dist(a.x, a.y, b.x, b.y) < ALIEN[a.type].r) {
+        if (a.hp > 0 && segDist(a.x, a.y, px, py, b.x, b.y) < ALIEN[a.type].r) {
           hitAlien(a, b.dmg);
-          spark(b.x, b.y, b.color);
+          if (b.missile) {
+            playMissileImpactSound();
+            explode(b.x, b.y, 16, b.color);
+          } else {
+            spark(b.x, b.y, b.color);
+          }
           b.life = 0;
           break;
         }
@@ -1542,7 +1656,9 @@
       const item = BAR[i];
       const id = item && item.ammo;
       const a = id ? AMMO[id] : null;
-      const selected = a && g.p.ammo === id;
+      const mid = item && item.missile;
+      const m = mid ? MISSILES[mid] : null;
+      const selected = (a && g.p.ammo === id) || (m && g.p.missile === mid);
       ctx.fillStyle = 'rgba(12,24,48,0.92)';
       ctx.fillRect(x, y0, SLOT, SLOT);
       ctx.strokeStyle = selected ? '#ffd166' : 'rgba(150,200,255,0.75)';
@@ -1561,6 +1677,16 @@
         ctx.fillText(a.name, x + SLOT / 2, y0 + 42);
         ctx.fillStyle = '#ffd166';
         ctx.fillText('x' + a.mult, x + SLOT / 2, y0 + 55);
+      }
+      if (m) {
+        ctx.fillStyle = m.color;
+        ctx.fillRect(x + SLOT / 2 - 12, y0 + 20, 24, 4);
+        ctx.fillStyle = '#e6f2ff';
+        ctx.font = '11px Consolas, monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(m.name, x + SLOT / 2, y0 + 42);
+        ctx.fillStyle = '#ffd166';
+        ctx.fillText(formatNum(m.dmg), x + SLOT / 2, y0 + 55);
       }
     }
     ctx.textAlign = 'left';
@@ -1841,6 +1967,7 @@
     const item = BAR[i];
     if (!item) return;
     if (item.ammo) g.p.ammo = item.ammo;
+    if (item.missile) g.p.missile = item.missile;
     if (item.attack && g.p.target && g.p.target.hp > 0 && !g.p.dead) startAttack(g.p.target);
   }
 
@@ -1874,6 +2001,7 @@
     if (g.paused) return;
     const slot = BAR_KEYS.indexOf(e.code);
     if (slot >= 0) useSlot(slot);
+    if (e.code === 'Space') { e.preventDefault(); fireMissile(); }
     const u = UPGRADES.find(x => x.key === e.code);
     if (u) buyUpgrade(u);
   });
