@@ -1663,16 +1663,42 @@
   }
 
   // ---------- Hangar ----------
-  const HANGAR_BTN = { x: 16, y: 146, w: 140, h: 26 };
+  // Icono del hangar, arriba a la derecha junto a los de nave, usuario y misiones
+  function hangarIconGeom() { return { x: W - 184, y: 16, w: 36, h: 36 }; }
 
   function inBase() {
     const z = g.zone, p = g.p;
     return dist(p.x, p.y, z.base.x, z.base.y) < z.base.r;
   }
 
-  function hangarBtnHit(x, y) {
-    const b = HANGAR_BTN;
-    return inBase() && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
+  // Icono del hangar: solo se abre dentro de la base; fuera aparece apagado
+  function drawHangarIcon(b) {
+    const hover = inBox(b, mouse.x, mouse.y);
+    const on = inBase();
+    const col = on ? '#ffd166' : '#5f6e84';
+    const bg = ctx.createLinearGradient(0, b.y, 0, b.y + b.h);
+    bg.addColorStop(0, '#1b2a44');
+    bg.addColorStop(1, '#070d18');
+    ctx.fillStyle = bg;
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeStyle = hover && on ? '#fff0b3' : col;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(b.x + 1, b.y + 1, b.w - 2, b.h - 2);
+    // Edificio del hangar: cubierta curva con puerta
+    const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(cx - 9, cy + 7);
+    ctx.lineTo(cx - 9, cy - 1);
+    ctx.quadraticCurveTo(cx, cy - 10, cx + 9, cy - 1);
+    ctx.lineTo(cx + 9, cy + 7);
+    ctx.moveTo(cx - 4, cy + 7);
+    ctx.lineTo(cx - 4, cy + 1);
+    ctx.lineTo(cx + 4, cy + 1);
+    ctx.lineTo(cx + 4, cy + 7);
+    ctx.stroke();
+    if (hover) drawIconTooltip(b, on ? 'Hangar' : 'Hangar (solo en la base)');
   }
 
   // Distribución del hangar: se adapta al número de naves, ranuras y láseres
@@ -1739,11 +1765,6 @@
     ctx.textAlign = 'left';
   }
 
-  function drawHangarButton() {
-    const b = HANGAR_BTN;
-    hangarButton(b.x, b.y, b.w, b.h, 'HANGAR [H]', false);
-  }
-
   function drawHangar() {
     const L = hangarLayout();
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
@@ -1796,7 +1817,7 @@
     }
 
     ctx.fillStyle = '#5f6e84';
-    ctx.fillText('Selecciona una ranura y luego una opción. H o Esc para cerrar.', L.px + 20, L.instrY);
+    ctx.fillText('Selecciona una ranura y luego una opción. Esc para cerrar.', L.px + 20, L.instrY);
   }
 
   function drawSafeMsg() {
@@ -2010,6 +2031,7 @@
     drawStationWindow();
     drawPlayerWindow();
     drawNaveWindow();
+    drawHangarIcon(hangarIconGeom());
     drawActionBar();
     drawSafeMsg();
     drawMinimap();
@@ -2026,7 +2048,6 @@
       drawCenter('P / Esc para continuar', '#9fb3c8', 16, 0.9, H / 2 + 40);
     }
     if (g.hangar.open) drawHangar();
-    else if (inBase()) drawHangarButton();
     drawCursor();
   }
 
@@ -2036,7 +2057,11 @@
   canvas.addEventListener('contextmenu', e => e.preventDefault());
   canvas.addEventListener('mousedown', e => {
     if (g.hangar.open) { hangarClick(e.clientX, e.clientY); return; }
-    if (hangarBtnHit(e.clientX, e.clientY)) { g.hangar.open = true; return; }
+    // Icono del hangar: abre el hangar solo dentro de la base
+    if (inBox(hangarIconGeom(), e.clientX, e.clientY)) {
+      if (inBase()) g.hangar.open = true;
+      return;
+    }
     // Ventana de misiones: el cuadrado la abre; el botón X la minimiza. Un clic dentro no mueve la nave
     const mp = missionPanelGeom();
     if (e.clientX >= mp.x && e.clientX <= mp.x + mp.w && e.clientY >= mp.y && e.clientY <= mp.y + mp.h) {
@@ -2160,10 +2185,9 @@
 
   addEventListener('keydown', e => {
     if (g.hangar.open) {
-      if (e.code === 'Escape' || e.code === 'KeyH') g.hangar.open = false;
+      if (e.code === 'Escape') g.hangar.open = false;
       return;
     }
-    if (e.code === 'KeyH' && !g.p.dead && inBase()) { g.hangar.open = true; return; }
     if (e.code === 'ControlLeft' || e.code === 'ControlRight') {
       e.preventDefault();
       if (!e.repeat && !g.paused) toggleAttack();
