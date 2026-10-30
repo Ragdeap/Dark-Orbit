@@ -174,6 +174,7 @@
       missions: [{ id: 0, progress: 0 }, { id: 1, progress: 0 }], nextMission: 2, missionSel: 0,
       banner: 0, bannerText: '', rewardT: 0, rewardLines: [], hitFlash: 0, paused: false,
       missionOpen: false, missionTab: 'summary', stationOpen: false,
+      naveOpen: false, navePos: null,
       playerOpen: false, playerPos: null, playerId: String(Math.floor(10000000 + Math.random() * 90000000)),
       level: 1, teleportBonus: 0, lootKeys: 0,
       safeT: 0, wasSafe: false,
@@ -1217,6 +1218,174 @@
     ctx.restore();
   }
 
+  // ---------- Ventana de nave ----------
+  // Seis datos en dos columnas de tres: izquierda casco, escudo y nanocasco; derecha configuración, tonelaje y velocidad
+  const NAVE_W = 340, NAVE_H = 114;
+
+  // Minimizada es un icono junto a los de usuario y misiones; abierta, una ventana arrastrable
+  function naveGeom() {
+    if (!g.naveOpen) return { x: W - 140, y: 16, w: 36, h: 36 };
+    const pos = g.navePos || { x: 16, y: 190 };
+    const x = clamp(pos.x, 0, W - NAVE_W), y = clamp(pos.y, 0, H - NAVE_H);
+    return { x, y, w: NAVE_W, h: NAVE_H, close: { x: x + NAVE_W - 26, y: y + 6, w: 20, h: 20 } };
+  }
+
+  // Silueta de nave: triángulo apuntando hacia arriba
+  function drawShipIcon(cx, cy, s) {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - s);
+    ctx.lineTo(cx + s * 0.7, cy + s * 0.8);
+    ctx.lineTo(cx, cy + s * 0.4);
+    ctx.lineTo(cx - s * 0.7, cy + s * 0.8);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawNaveIcon(b) {
+    const hover = inBox(b, mouse.x, mouse.y);
+    const bg = ctx.createLinearGradient(0, b.y, 0, b.y + b.h);
+    bg.addColorStop(0, '#1b2a44');
+    bg.addColorStop(1, '#070d18');
+    ctx.fillStyle = bg;
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeStyle = hover ? '#fff0b3' : '#ffd166';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(b.x + 1, b.y + 1, b.w - 2, b.h - 2);
+    ctx.fillStyle = '#ffd166';
+    ctx.shadowColor = '#ffd166';
+    ctx.shadowBlur = hover ? 16 : 6;
+    drawShipIcon(b.x + b.w / 2, b.y + b.h / 2, 11);
+    ctx.shadowBlur = 0;
+    if (hover) drawIconTooltip(b, 'Nave');
+  }
+
+  // Iconos de las filas de la ventana de nave, con el mismo trazo dorado que la de usuario
+  function drawNaveRowIcon(kind, cx, cy) {
+    ctx.fillStyle = '#ffd166';
+    ctx.strokeStyle = '#ffd166';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    if (kind === 'hull') {
+      // Cruz: casco
+      ctx.fillRect(cx - 1.5, cy - 5, 3, 10);
+      ctx.fillRect(cx - 5, cy - 1.5, 10, 3);
+    } else if (kind === 'shield') {
+      // Escudo
+      ctx.moveTo(cx, cy - 6);
+      ctx.lineTo(cx + 5, cy - 3.5);
+      ctx.lineTo(cx + 5, cy + 1);
+      ctx.quadraticCurveTo(cx + 5, cy + 5, cx, cy + 6);
+      ctx.quadraticCurveTo(cx - 5, cy + 5, cx - 5, cy + 1);
+      ctx.lineTo(cx - 5, cy - 3.5);
+      ctx.closePath();
+      ctx.stroke();
+    } else if (kind === 'nano') {
+      // Hexágono: nanocasco
+      for (let i = 0; i < 6; i++) {
+        const a = i * Math.PI / 3;
+        ctx.lineTo(cx + Math.cos(a) * 5, cy + Math.sin(a) * 5);
+      }
+      ctx.closePath();
+      ctx.stroke();
+    } else if (kind === 'config') {
+      // Engranaje: configuración
+      ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+      for (let i = 0; i < 6; i++) {
+        const a = i * Math.PI / 3;
+        ctx.moveTo(cx + Math.cos(a) * 3.5, cy + Math.sin(a) * 3.5);
+        ctx.lineTo(cx + Math.cos(a) * 5.5, cy + Math.sin(a) * 5.5);
+      }
+      ctx.stroke();
+    } else if (kind === 'cargo') {
+      // Caja: tonelaje
+      ctx.strokeRect(cx - 5, cy - 4, 10, 8);
+      ctx.moveTo(cx - 5, cy);
+      ctx.lineTo(cx + 5, cy);
+      ctx.stroke();
+    } else if (kind === 'speed') {
+      // Doble flecha: velocidad
+      ctx.moveTo(cx - 4, cy - 4);
+      ctx.lineTo(cx, cy);
+      ctx.lineTo(cx - 4, cy + 4);
+      ctx.moveTo(cx, cy - 4);
+      ctx.lineTo(cx + 4, cy);
+      ctx.lineTo(cx, cy + 4);
+      ctx.stroke();
+    }
+  }
+
+  // Barra de segmentos: cuánto de "frac" (0 a 1) está lleno
+  function drawSegBar(x, y, w, h, frac) {
+    const n = 10, gap = 2, segW = (w - gap * (n - 1)) / n;
+    const on = Math.round(clamp(frac, 0, 1) * n);
+    for (let i = 0; i < n; i++) {
+      ctx.fillStyle = i < on ? '#ffd166' : '#1e2c44';
+      ctx.fillRect(x + i * (segW + gap), y, segW, h);
+    }
+  }
+
+  function drawNaveWindow() {
+    const b = naveGeom();
+    ctx.save();
+    if (!g.naveOpen) { drawNaveIcon(b); ctx.restore(); return; }
+    ctx.fillStyle = '#0b1424';
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeStyle = '#ffd166';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
+    ctx.font = '13px Consolas, monospace';
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#ffd166';
+    drawShipIcon(b.x + 18, b.y + 17, 8);
+    ctx.fillText('NAVE', b.x + 30, b.y + 22);
+    ctx.fillStyle = '#5f6e84';
+    ctx.fillRect(b.x + 8, b.y + 30, b.w - 16, 1);
+    ctx.fillRect(b.x + 170, b.y + 38, 1, b.h - 48);
+    // Botón de cerrar
+    const c = b.close;
+    ctx.strokeStyle = '#cfe8ff';
+    ctx.beginPath();
+    ctx.moveTo(c.x + 5, c.y + 5); ctx.lineTo(c.x + c.w - 5, c.y + c.h - 5);
+    ctx.moveTo(c.x + c.w - 5, c.y + 5); ctx.lineTo(c.x + 5, c.y + c.h - 5);
+    ctx.stroke();
+
+    const p = g.p;
+    const cargo = Object.values(g.cargo).reduce((sum, n) => sum + n, 0);
+    const cap = SHIPS[g.shipId].cargo;
+    const nano = 0;   // nanocasco actual: sin implementar, siempre 0
+    // Columna izquierda: casco, escudo y nanocasco (todavía sin implementar: 0)
+    const left = [
+      { kind: 'hull', frac: p.hp / p.maxHp, value: formatNum(Math.ceil(p.hp)) },
+      { kind: 'shield', frac: p.maxShield ? p.shield / p.maxShield : 0, value: formatNum(Math.ceil(p.shield)) },
+      // Nanocasco: su máximo es igual al casco de la nave. Sin implementar, siempre está a 0
+      { kind: 'nano', frac: nano / p.maxHp, value: formatNum(nano) },
+    ];
+    // Columna derecha: tonelaje, velocidad máxima y configuración (sin implementar: 1)
+    const right = [
+      { kind: 'cargo', frac: cargo / cap, value: `${formatNum(cargo)} / ${formatNum(cap)}` },
+      { kind: 'speed', frac: null, value: formatNum(Math.round(p.speed)) },
+      { kind: 'config', frac: null, value: '1' },
+    ];
+    const rowY = i => b.y + 50 + i * 21;
+    ctx.font = '12px Consolas, monospace';
+    left.forEach((r, i) => {
+      drawNaveRowIcon(r.kind, b.x + 20, rowY(i) - 4);
+      if (r.frac !== null) drawSegBar(b.x + 32, rowY(i) - 8, 64, 7, r.frac);
+      ctx.fillStyle = '#cfe8ff';
+      ctx.textAlign = 'right';
+      ctx.fillText(r.value, b.x + 160, rowY(i));
+    });
+    right.forEach((r, i) => {
+      drawNaveRowIcon(r.kind, b.x + 190, rowY(i) - 4);
+      if (r.frac !== null) drawSegBar(b.x + 202, rowY(i) - 8, 60, 7, r.frac);
+      ctx.fillStyle = '#cfe8ff';
+      ctx.textAlign = 'right';
+      ctx.fillText(r.value, b.x + b.w - 14, rowY(i));
+    });
+    ctx.restore();
+  }
+
   // ---------- Estación de venta ----------
   const STATION_RANGE = 110;   // distancia máxima a la estación para abrir la venta
   const STATION_CLICK = 40;    // radio del clic sobre la estación
@@ -1483,16 +1652,10 @@
     ctx.font = '13px Consolas, monospace';
     ctx.textBaseline = 'alphabetic';
 
-    // Izquierda arriba: casco, créditos, munición
-    bar(16, 34, 220, 12, p.hp / maxHpNow(), '#ff5c5c');
-    bar(16, 52, 220, 8, p.maxShield ? p.shield / p.maxShield : 0, '#5ac8ff');
-    ctx.fillStyle = '#cfe8ff';
-    ctx.fillText(`CASCO ${Math.ceil(p.hp)} / ${maxHpNow()}`, 246, 45);
-    ctx.fillText(`ESCUDO ${Math.ceil(p.shield)} / ${p.maxShield}`, 246, 63);
-    ctx.fillText(`MUNICIÓN ${AMMO[p.ammo].name}`, 16, 80);
+    // Izquierda arriba: solo el aviso de guardado. Casco, escudo y munición están en la ventana de nave
     if (!storageOk) {
       ctx.fillStyle = '#ff9f1a';
-      ctx.fillText('Progreso no guardado: el navegador bloquea localStorage', 16, 98);
+      ctx.fillText('Progreso no guardado: el navegador bloquea localStorage', 16, 34);
     }
 
     ctx.textAlign = 'left';
@@ -1846,6 +2009,7 @@
     drawMissionPanel();
     drawStationWindow();
     drawPlayerWindow();
+    drawNaveWindow();
     drawActionBar();
     drawSafeMsg();
     drawMinimap();
@@ -1897,6 +2061,14 @@
       if (!g.playerOpen) g.playerOpen = true;
       else if (inBox(pw.close, e.clientX, e.clientY)) g.playerOpen = false;
       else if (e.clientY < pw.y + 30) g.drag = { key: 'playerPos', dx: e.clientX - pw.x, dy: e.clientY - pw.y };
+      return;
+    }
+    // Ventana de nave: el icono la abre; la X la cierra; la barra superior la arrastra
+    const nw = naveGeom();
+    if (inBox(nw, e.clientX, e.clientY)) {
+      if (!g.naveOpen) g.naveOpen = true;
+      else if (inBox(nw.close, e.clientX, e.clientY)) g.naveOpen = false;
+      else if (e.clientY < nw.y + 30) g.drag = { key: 'navePos', dx: e.clientX - nw.x, dy: e.clientY - nw.y };
       return;
     }
     // Ventana de venta: la X la cierra y cada "Vender" vende esa materia; un clic dentro no mueve la nave
@@ -2020,7 +2192,7 @@
       damage: p.damage, speed: p.speed, ammo: p.ammo,
       up: g.up, credits: g.credits, uridium: g.uridium, exp: g.exp, honor: g.honor,
       cargo: g.cargo, missions: g.missions, nextMission: g.nextMission, missionPos: g.missionPos,
-      playerId: g.playerId, playerPos: g.playerPos, teleportBonus: g.teleportBonus, lootKeys: g.lootKeys,
+      playerId: g.playerId, playerPos: g.playerPos, navePos: g.navePos, teleportBonus: g.teleportBonus, lootKeys: g.lootKeys,
       shipId: g.shipId, equip: g.equip, generators: g.generators,
     };
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (err) { storageOk = false; }
@@ -2040,6 +2212,7 @@
     if (d.missionPos) g.missionPos = d.missionPos;
     if (d.playerId) g.playerId = d.playerId;
     if (d.playerPos) g.playerPos = d.playerPos;
+    if (d.navePos) g.navePos = d.navePos;
     g.teleportBonus = d.teleportBonus || 0;
     g.lootKeys = d.lootKeys || 0;
     const p = g.p;
