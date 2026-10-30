@@ -165,6 +165,8 @@
       missions: [{ id: 0, progress: 0 }, { id: 1, progress: 0 }], nextMission: 2, missionSel: 0,
       banner: 0, bannerText: '', rewardT: 0, rewardLines: [], hitFlash: 0, paused: false,
       missionOpen: false, missionTab: 'summary', stationOpen: false,
+      playerOpen: false, playerPos: null, playerId: String(Math.floor(10000000 + Math.random() * 90000000)),
+      level: 1, teleportBonus: 0, lootKeys: 0,
       safeT: 0, wasSafe: false,
       shipId: 'PHOENIX',
       equip: { PHOENIX: ['LF1'] },
@@ -929,6 +931,177 @@
     ctx.restore();
   }
 
+  // ---------- Ventana de usuario ----------
+  const PLAYER_W = 340, PLAYER_H = 116;
+  const formatNum = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+  // Minimizada es un icono abajo a la izquierda; abierta, una ventana arrastrable
+  function playerGeom() {
+    if (!g.playerOpen) return { x: W - 96, y: 16, w: 36, h: 36 };
+    const pos = g.playerPos || { x: 16, y: H - PLAYER_H - 60 };
+    const x = clamp(pos.x, 0, W - PLAYER_W), y = clamp(pos.y, 0, H - PLAYER_H);
+    return { x, y, w: PLAYER_W, h: PLAYER_H, close: { x: x + PLAYER_W - 26, y: y + 6, w: 20, h: 20 } };
+  }
+
+  // Busto de usuario: cabeza y hombros, sin detalle. Centrado en (cx, cy) con tamaño de referencia "size"
+  function drawBustIcon(cx, cy, size) {
+    ctx.beginPath();
+    ctx.arc(cx, cy - size * 0.22, size * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx, cy + size * 0.45, size * 0.4, Math.PI, 0);
+    ctx.fill();
+  }
+
+  function drawPlayerIcon(b) {
+    const hover = inBox(b, mouse.x, mouse.y);
+    const bg = ctx.createLinearGradient(0, b.y, 0, b.y + b.h);
+    bg.addColorStop(0, '#1b2a44');
+    bg.addColorStop(1, '#070d18');
+    ctx.fillStyle = bg;
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeStyle = hover ? '#fff0b3' : '#ffd166';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(b.x + 1, b.y + 1, b.w - 2, b.h - 2);
+    ctx.fillStyle = '#ffd166';
+    ctx.shadowColor = '#ffd166';
+    ctx.shadowBlur = hover ? 16 : 6;
+    drawBustIcon(b.x + b.w / 2, b.y + b.h / 2, 26);
+    ctx.shadowBlur = 0;
+    if (hover) drawIconTooltip(b, 'Usuario');
+  }
+
+  // Iconos de las filas de la ventana de usuario (dibujados con trazos, sin texto). Centrados en (cx, cy), tamaño 12 px
+  function drawDataIcon(kind, cx, cy) {
+    const r = 6;
+    ctx.fillStyle = '#ffd166';
+    ctx.strokeStyle = '#ffd166';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    if (kind === 'id') {
+      // Tarjeta de identificación: marco, cabeza y líneas de datos
+      ctx.strokeRect(cx - 6, cy - 4.5, 12, 9);
+      ctx.arc(cx - 2.5, cy - 0.5, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillRect(cx + 1, cy - 2, 3.5, 1);
+      ctx.fillRect(cx + 1, cy + 1, 3.5, 1);
+    } else if (kind === 'exp') {
+      for (let i = 0; i < 10; i++) {
+        const a = -Math.PI / 2 + i * Math.PI / 5;
+        const d = i % 2 ? r * 0.45 : r;
+        ctx.lineTo(cx + Math.cos(a) * d, cy + Math.sin(a) * d);
+      }
+      ctx.closePath();
+      ctx.fill();
+    } else if (kind === 'level') {
+      [0.4, 0.7, 1].forEach((k, i) => ctx.rect(cx - r + i * 4.5, cy + r - r * 2 * k, 3, r * 2 * k));
+      ctx.fill();
+    } else if (kind === 'honor') {
+      ctx.arc(cx, cy - 2, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(cx - 3, cy + 1);
+      ctx.lineTo(cx - 4, cy + r);
+      ctx.lineTo(cx - 1, cy + r - 1.5);
+      ctx.lineTo(cx + 1, cy + r);
+      ctx.lineTo(cx + 3, cy + 1);
+      ctx.closePath();
+      ctx.fill();
+    } else if (kind === 'credits') {
+      // Logo de créditos: una "C" de trazos rectos con los extremos superior e inferior hacia la derecha, como la "U" de uridium
+      ctx.strokeStyle = '#ffd166';
+      ctx.shadowColor = '#ffd166';
+      ctx.shadowBlur = 4;
+      ctx.lineWidth = 2;
+      ctx.moveTo(cx + 4, cy - 5);
+      ctx.lineTo(cx - 3, cy - 5);
+      ctx.lineTo(cx - 3, cy + 5);
+      ctx.lineTo(cx + 4, cy + 5);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    } else if (kind === 'uridium') {
+      // Logo de uridium: una "U" luminosa con un pequeño trazo hacia la derecha en el brazo derecho
+      ctx.strokeStyle = '#ffd166';
+      ctx.shadowColor = '#ffd166';
+      ctx.shadowBlur = 4;
+      ctx.lineWidth = 2;
+      ctx.moveTo(cx - 4, cy - 5);
+      ctx.lineTo(cx - 4, cy + 4);
+      ctx.lineTo(cx + 3, cy + 4);
+      ctx.lineTo(cx + 3, cy - 5);
+      ctx.moveTo(cx + 3, cy - 2);
+      ctx.lineTo(cx + 6, cy - 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    } else if (kind === 'teleport') {
+      [[0.3, -1], [-0.6, 0.15], [0, 0.15], [-0.3, 1], [0.6, -0.2], [0, -0.2]].forEach(([x, y], i) => {
+        if (i === 0) ctx.moveTo(cx + x * r, cy + y * r);
+        else ctx.lineTo(cx + x * r, cy + y * r);
+      });
+      ctx.closePath();
+      ctx.fill();
+    } else if (kind === 'keys') {
+      ctx.arc(cx - 3.5, cy, 2.5, 0, Math.PI * 2);
+      ctx.moveTo(cx - 1, cy);
+      ctx.lineTo(cx + r, cy);
+      ctx.moveTo(cx + 3.5, cy);
+      ctx.lineTo(cx + 3.5, cy + 3);
+      ctx.moveTo(cx + r, cy);
+      ctx.lineTo(cx + r, cy + 2);
+      ctx.stroke();
+    }
+  }
+
+  // Etiqueta de una fila: cada dato se identifica solo con su icono
+  function drawDataLabel(kind, x, y) {
+    drawDataIcon(kind, x + 6, y - 4);
+  }
+
+  function drawPlayerWindow() {
+    const b = playerGeom();
+    ctx.save();
+    if (!g.playerOpen) { drawPlayerIcon(b); ctx.restore(); return; }
+    ctx.fillStyle = '#0b1424';
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeStyle = '#ffd166';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
+    ctx.font = '13px Consolas, monospace';
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#ffd166';
+    drawBustIcon(b.x + 18, b.y + 17, 14);
+    ctx.fillText('USUARIO', b.x + 30, b.y + 22);
+    ctx.fillStyle = '#5f6e84';
+    ctx.fillRect(b.x + 8, b.y + 30, b.w - 16, 1);
+    ctx.fillRect(b.x + 172, b.y + 38, 1, b.h - 48);
+    // Botón de cerrar
+    const c = b.close;
+    ctx.strokeStyle = '#cfe8ff';
+    ctx.beginPath();
+    ctx.moveTo(c.x + 5, c.y + 5); ctx.lineTo(c.x + c.w - 5, c.y + c.h - 5);
+    ctx.moveTo(c.x + c.w - 5, c.y + 5); ctx.lineTo(c.x + 5, c.y + c.h - 5);
+    ctx.stroke();
+    // Columna izquierda: identificador, experiencia, nivel y honor
+    const left = [['id', g.playerId], ['exp', formatNum(g.exp)], ['level', g.level], ['honor', formatNum(g.honor)]];
+    // Columna derecha: créditos, uridium, bonos de teleportación y llaves de botín
+    const right = [['credits', formatNum(g.credits)], ['uridium', formatNum(g.uridium)], ['teleport', formatNum(g.teleportBonus)], ['keys', formatNum(g.lootKeys)]];
+    const rowY = i => b.y + 48 + i * 20;
+    left.forEach(([kind, value], i) => {
+      drawDataLabel(kind, b.x + 14, rowY(i));
+      ctx.fillStyle = '#cfe8ff';
+      ctx.textAlign = 'right';
+      ctx.fillText(String(value), b.x + 160, rowY(i));
+    });
+    right.forEach(([kind, value], i) => {
+      drawDataLabel(kind, b.x + 184, rowY(i));
+      ctx.fillStyle = '#cfe8ff';
+      ctx.textAlign = 'right';
+      ctx.fillText(String(value), b.x + b.w - 14, rowY(i));
+    });
+    ctx.restore();
+  }
+
   // ---------- Estación de venta ----------
   const STATION_RANGE = 110;   // distancia máxima a la estación para abrir la venta
   const STATION_CLICK = 40;    // radio del clic sobre la estación
@@ -1034,7 +1207,7 @@
     if (!g.missionOpen) return { x: W - 52, y: 16, w: 36, h: 36 };
     const w = 300, h = 190;
     // Por defecto arriba a la derecha; si se ha arrastrado, se queda en la posición elegida (dentro de la pantalla)
-    const pos = g.missionPos || { x: W - w - 16, y: 16 };
+    const pos = g.missionPos || { x: W - w - 16, y: 64 };
     const x = clamp(pos.x, 0, W - w), y = clamp(pos.y, 0, H - h);
     // Bolas de misiones junto a la X, alineadas a la derecha; una por misión aceptada
     const n = g.missions.length;
@@ -1067,6 +1240,21 @@
     return lines;
   }
 
+  // Etiqueta que aparece debajo de un icono al pasar el ratón
+  function drawIconTooltip(b, label) {
+    ctx.font = '13px Consolas, monospace';
+    const tw = ctx.measureText(label).width;
+    const bx = b.x + b.w / 2 - (tw + 16) / 2, by = b.y + b.h + 8;
+    ctx.fillStyle = '#0b1424';
+    ctx.fillRect(bx, by, tw + 16, 22);
+    ctx.strokeStyle = '#ffd166';
+    ctx.strokeRect(bx + 0.5, by + 0.5, tw + 15, 21);
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(label, bx + 8, by + 15);
+  }
+
   // Icono minimizado: una exclamación dorada sobre un cuadro oscuro, con brillo y etiqueta al pasar el ratón
   function drawMissionIcon(b) {
     const hover = mouse.x >= b.x && mouse.x <= b.x + b.w && mouse.y >= b.y && mouse.y <= b.y + b.h;
@@ -1086,19 +1274,7 @@
     ctx.textBaseline = 'middle';
     ctx.fillText('!', b.x + b.w / 2, b.y + b.h / 2 + 1);
     ctx.shadowBlur = 0;
-    if (hover) {
-      ctx.font = '13px Consolas, monospace';
-      const label = 'Misiones';
-      const tw = ctx.measureText(label).width;
-      const tx = b.x - tw - 22, ty = b.y + b.h / 2;
-      ctx.fillStyle = '#0b1424';
-      ctx.fillRect(tx - 8, ty - 11, tw + 16, 22);
-      ctx.strokeStyle = '#ffd166';
-      ctx.strokeRect(tx - 7.5, ty - 10.5, tw + 15, 21);
-      ctx.fillStyle = '#ffffff';
-      ctx.textAlign = 'left';
-      ctx.fillText(label, tx, ty + 1);
-    }
+    if (hover) drawIconTooltip(b, 'Misiones');
   }
 
   function drawMissionPanel() {
@@ -1198,13 +1374,10 @@
     ctx.fillStyle = '#cfe8ff';
     ctx.fillText(`CASCO ${Math.ceil(p.hp)} / ${maxHpNow()}`, 246, 45);
     ctx.fillText(`ESCUDO ${Math.ceil(p.shield)} / ${p.maxShield}`, 246, 63);
-    ctx.fillText(`CRÉDITOS ${g.credits}`, 16, 80);
-    ctx.fillText(`MUNICIÓN ${AMMO[p.ammo].name}`, 16, 98);
-    ctx.fillText(`EXP ${g.exp}   HONOR ${g.honor}   URIDIUM ${g.uridium}`, 16, 116);
-    ctx.fillText(`PROMETIUM ${g.cargo.prometium}   TERBIUM ${g.cargo.terbium}`, 16, 134);
+    ctx.fillText(`MUNICIÓN ${AMMO[p.ammo].name}`, 16, 80);
     if (!storageOk) {
       ctx.fillStyle = '#ff9f1a';
-      ctx.fillText('Progreso no guardado: el navegador bloquea localStorage', 16, 152);
+      ctx.fillText('Progreso no guardado: el navegador bloquea localStorage', 16, 98);
     }
 
     ctx.textAlign = 'left';
@@ -1545,6 +1718,7 @@
     drawHUD();
     drawMissionPanel();
     drawStationWindow();
+    drawPlayerWindow();
     drawActionBar();
     drawSafeMsg();
     drawMinimap();
@@ -1586,8 +1760,16 @@
         const s = mp.slots.findIndex(inRect);
         if (s >= 0 && s < g.missions.length) { g.missionSel = s; g.missionTab = 'summary'; }
         // Barra superior: arrastra la ventana
-        else if (e.clientY < mp.y + 30) g.drag = { dx: e.clientX - mp.x, dy: e.clientY - mp.y };
+        else if (e.clientY < mp.y + 30) g.drag = { key: 'missionPos', dx: e.clientX - mp.x, dy: e.clientY - mp.y };
       }
+      return;
+    }
+    // Ventana de usuario: el icono la abre; la X la cierra; la barra superior la arrastra
+    const pw = playerGeom();
+    if (inBox(pw, e.clientX, e.clientY)) {
+      if (!g.playerOpen) g.playerOpen = true;
+      else if (inBox(pw.close, e.clientX, e.clientY)) g.playerOpen = false;
+      else if (e.clientY < pw.y + 30) g.drag = { key: 'playerPos', dx: e.clientX - pw.x, dy: e.clientY - pw.y };
       return;
     }
     // Ventana de venta: la X la cierra y cada "Vender" vende esa materia; un clic dentro no mueve la nave
@@ -1636,7 +1818,7 @@
 
   // Arrastre de la ventana de misiones: sigue al cursor hasta soltar el botón
   addEventListener('mousemove', e => {
-    if (g.drag) g.missionPos = { x: e.clientX - g.drag.dx, y: e.clientY - g.drag.dy };
+    if (g.drag) g[g.drag.key] = { x: e.clientX - g.drag.dx, y: e.clientY - g.drag.dy };
   });
 
   addEventListener('mouseup', () => {
@@ -1709,6 +1891,7 @@
       damage: p.damage, speed: p.speed, ammo: p.ammo,
       up: g.up, credits: g.credits, uridium: g.uridium, exp: g.exp, honor: g.honor,
       cargo: g.cargo, missions: g.missions, nextMission: g.nextMission, missionPos: g.missionPos,
+      playerId: g.playerId, playerPos: g.playerPos, teleportBonus: g.teleportBonus, lootKeys: g.lootKeys,
       shipId: g.shipId, equip: g.equip, generators: g.generators,
     };
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (err) { storageOk = false; }
@@ -1726,6 +1909,10 @@
     g.cargo = { ...g.cargo, ...d.cargo };
     if (Array.isArray(d.missions)) { g.missions = d.missions; g.nextMission = d.nextMission; }
     if (d.missionPos) g.missionPos = d.missionPos;
+    if (d.playerId) g.playerId = d.playerId;
+    if (d.playerPos) g.playerPos = d.playerPos;
+    g.teleportBonus = d.teleportBonus || 0;
+    g.lootKeys = d.lootKeys || 0;
     const p = g.p;
     p.x = d.x; p.y = d.y; p.maxHp = d.maxHp; p.hp = d.hp > 0 ? d.hp : d.maxHp;
     p.damage = d.damage; p.speed = d.speed;
