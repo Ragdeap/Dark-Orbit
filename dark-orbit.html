@@ -15,8 +15,14 @@
 (() => {
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
-  let W = 0, H = 0;
-  function resize() { W = canvas.width = innerWidth; H = canvas.height = innerHeight; }
+  let W = 0, H = 0, dpr = 1;
+  // El canvas se dibuja con la resolución real de la pantalla (escalado de Windows) para que no salga borroso
+  function resize() {
+    dpr = window.devicePixelRatio || 1;
+    W = innerWidth; H = innerHeight;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  }
   addEventListener('resize', resize);
   resize();
 
@@ -241,7 +247,7 @@
         shield: 0, maxShield: 0, absorb: 0,
         damage: 0, cool: 0, ammo: 'LCB10', missile: null, missCool: 0,  // damage: bonus de las mejoras, se suma al de los láseres
         target: null, tx: null, ty: null, dead: false, respawnT: 0,
-        attacking: false,
+        attacking: false, rank: null, company: 'VRU',
       },
       up: { dmg: 0, hp: 0, spd: 0 },
       zi: 0, zone: ZONES[0],
@@ -265,7 +271,7 @@
         x: b.x, y: b.y, angle: 0, tx: b.x, ty: b.y, portal: false, target: null, cool: 0, wait: 0, hopT: rnd(30, 90),
         hp: SHIPS[BOT_SHIP].hp, maxHp: SHIPS[BOT_SHIP].hp, speed: SHIPS[BOT_SHIP].speed, dead: false, respawnT: 0,
         // isPlayer: los bonus de láser contra jugadores (LF-4 Magmadrill) también les afectan
-        isBot: true, isPlayer: true, hostile: false,
+        isBot: true, isPlayer: true, hostile: false, rank: null, company: 'VRU',
       })),
     };
   }
@@ -410,7 +416,7 @@
   function killAlien(a, by = g.p) {
     const t = ALIEN[a.type];
     explode(a.x, a.y, t.r, t.color);
-    playExplosionSound();
+    soundAt(a.x, a.y, playExplosionSound);
     if (g.p.target === a) { g.p.target = null; g.p.attacking = false; }
     if (by !== g.p) return;
     const r = t.rewards;
@@ -558,6 +564,12 @@
 
   // Sonido de disparo generado con Web Audio (no necesita archivos). Mismo sonido para todos los láseres.
   let audioCtx = null;
+  // Los sonidos de combate de otras naves (bots y sus objetivos) solo se oyen si la nave está a SOUND_RANGE o menos
+  const SOUND_RANGE = 900;
+  function soundAt(x, y, play) {
+    if (dist(x, y, g.p.x, g.p.y) <= SOUND_RANGE) play();
+  }
+
   function playLaserSound() {
     try {
       if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -756,6 +768,7 @@
     const p = g.p;
     // Si se desequipa un láser que daba vida, la vida actual no puede superar el nuevo máximo
     p.hp = Math.min(p.hp, maxHpNow());
+    updateRanks();
     while (g.aliens.length < ALIEN_CAP && g.zone.types.length) spawnAlien();
 
     if (p.dead) {
@@ -1021,6 +1034,7 @@
   function botFire(b, t) {
     const ang = Math.atan2(t.y - b.y, t.x - b.x);
     b.cool = BOT_COOL;
+    soundAt(b.x, b.y, playLaserSound);
     if (t === g.p) {
       g.enemyShots.push({
         x: b.x, y: b.y, vx: Math.cos(ang) * 300, vy: Math.sin(ang) * 300,
@@ -1056,7 +1070,7 @@
           if (a.isBot) { a.hostile = true; hurtBot(a, b.dmg); }
           else hitAlien(a, b.dmg, b.bot || g.p);
           if (b.missile) {
-            playMissileImpactSound();
+            soundAt(b.x, b.y, playMissileImpactSound);
             explode(b.x, b.y, 16, b.color);
           } else {
             spark(b.x, b.y, b.color);
@@ -1239,9 +1253,10 @@
         ctx.stroke();
       }
       ctx.fillStyle = '#6fe39a';
-      ctx.font = '11px Consolas, monospace';
+      ctx.font = '13px Consolas, monospace';
       ctx.textAlign = 'center';
       ctx.fillText(b.name, x, y + 16 + 22);
+      if (b.rank != null) drawRank(b.rank, x - ctx.measureText(b.name).width / 2 - 4, y + 16 + 22 - 6);
       ctx.textAlign = 'left';
     }
   }
@@ -1328,6 +1343,54 @@
   // Nombre fijo del jugador (de momento no tiene nomenclatura propia)
   const PLAYER_NAME = 'Ragdeap';
 
+  // Rangos de menor a mayor; el índice es el valor de `rank` (null = sin rango)
+  const RANKS = [
+    '01-cadete-espacial', '02-piloto-espacial', '03-piloto-mayor', '04-cabo', '05-sargento',
+    '06-sargento-primero', '07-subteniente', '08-teniente', '09-teniente-primero', '10-subcapitan',
+    '11-capitan', '12-capitan-primero', '13-comandante-subalterno', '14-comandante', '15-comandante-jefe',
+    '16-subcoronel', '17-coronel', '18-coronel-mayor', '19-general-de-brigada', '20-general', '21-general-supremo',
+  ];
+  const rankImgs = RANKS.map(f => {
+    const img = new Image();
+    img.src = 'rangos/' + f + '.svg';
+    return img;
+  });
+
+  // Dibuja el icono de rango con su borde derecho en `right`, centrado en `cy`. Mantiene la proporción del SVG
+  function drawRank(rank, right, cy) {
+    const img = rankImgs[rank];
+    if (!img || !img.complete || !img.naturalWidth) return;
+    const h = 18, w = h * img.naturalWidth / img.naturalHeight;
+    ctx.drawImage(img, right - w, cy - h / 2, w, h);
+  }
+
+  // Reparto de rangos por empresa, de mayor a menor. `n` = jugadores fijos; `pct` = % de la empresa (mínimo 1).
+  // `rank` es el índice en RANKS
+  const RANK_TABLE = [
+    { n: 1, rank: 20 }, { n: 2, rank: 19 }, { n: 3, rank: 18 }, { n: 5, rank: 17 }, { n: 20, rank: 16 },
+    { pct: 1, rank: 15 }, { pct: 1.5, rank: 14 }, { pct: 2, rank: 13 }, { pct: 2.5, rank: 12 }, { pct: 3, rank: 11 },
+    { pct: 3.5, rank: 10 }, { pct: 4, rank: 9 }, { pct: 4.5, rank: 8 }, { pct: 5, rank: 7 }, { pct: 6, rank: 6 },
+    { pct: 7, rank: 5 }, { pct: 8, rank: 4 }, { pct: 9, rank: 3 }, { pct: 10, rank: 2 }, { pct: 12.9, rank: 1 }, { pct: 20, rank: 0 },
+  ];
+
+  // Puntos de rango. De momento sólo PE, honor y nivel: el resto de términos de la fórmula aún no existe en el juego
+  const rankPoints = c => c.exp / 100000 + c.honor / 100 + levelFor(c.exp) * 100;
+
+  // Ordena a cada empresa por puntos de rango y reparte los rangos según RANK_TABLE
+  function updateRanks() {
+    const byCompany = {};
+    for (const c of [g.p, ...g.allies]) (byCompany[c.company] ||= []).push(c);
+    for (const list of Object.values(byCompany)) {
+      list.sort((a, b) => rankPoints(b) - rankPoints(a));
+      let pos = 0;
+      for (const row of RANK_TABLE) {
+        const slots = row.n ?? Math.max(1, Math.round(list.length * row.pct / 100));
+        for (let i = 0; i < slots && pos < list.length; i++) list[pos++].rank = row.rank;
+      }
+      for (; pos < list.length; pos++) list[pos].rank = null;
+    }
+  }
+
   function drawPlayer() {
     const p = g.p;
     if (p.dead) return;
@@ -1351,7 +1414,7 @@
     ctx.restore();
     // Nombre del jugador debajo de la nave: blanco y grueso, con borde negro
     ctx.save();
-    ctx.font = 'bold 12px Consolas, monospace';
+    ctx.font = 'bold 15px Consolas, monospace';
     ctx.textAlign = 'center';
     ctx.lineJoin = 'round';
     ctx.lineWidth = 3;
@@ -1359,6 +1422,7 @@
     ctx.strokeText(PLAYER_NAME, cx, cy + 36);
     ctx.fillStyle = '#ffffff';
     ctx.fillText(PLAYER_NAME, cx, cy + 36);
+    if (p.rank != null) drawRank(p.rank, cx - ctx.measureText(PLAYER_NAME).width / 2 - 4, cy + 36 - 6);
     ctx.restore();
   }
 
@@ -2361,6 +2425,8 @@
   }
 
   function draw() {
+    // Las coordenadas de dibujo siguen siendo píxeles CSS; la transformación las escala a la resolución real
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawBackground();
     drawStars();
     drawWorldBackground();
