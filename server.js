@@ -12,16 +12,18 @@ const PORT = 3000;
 const ROOT = __dirname;
 const GAME = path.join(ROOT, 'dark-orbit.html');
 const RANKS_DIR = path.join(ROOT, 'rangos');
+const COMPANIES_DIR = path.join(ROOT, 'empresas');
 const DATA_DIR = path.join(ROOT, 'data');
 const SAVE_FILE = path.join(DATA_DIR, 'save.json');
 const MAX_BODY = 1024 * 1024;
 
-// Sólo se sirven el juego y los iconos de rango; nada más del proyecto
+// Sólo se sirven el juego, los iconos de rango y los logos de empresa; nada más del proyecto
 function staticFile(pathname) {
   if (pathname === '/') return GAME;
   const file = path.normalize(path.join(ROOT, decodeURIComponent(pathname)));
   if (file === GAME) return GAME;
-  if (path.dirname(file) === RANKS_DIR && path.extname(file) === '.svg') return file;
+  const dir = path.dirname(file);
+  if ((dir === RANKS_DIR || dir === COMPANIES_DIR) && path.extname(file) === '.svg') return file;
   return null;
 }
 

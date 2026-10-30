@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 136" width="360" height="408">
+  <defs>
+    <radialGradient id="vru-base" cx="0.38" cy="0.34" r="0.75">
+      <stop offset="0" stop-color="#dcff9e"/>
+      <stop offset="0.5" stop-color="#5fb83a"/>
+      <stop offset="1" stop-color="#173d0c"/>
+    </radialGradient>
+    <radialGradient id="vru-sombra" cx="0.32" cy="0.28" r="0.95">
+      <stop offset="0.45" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.6"/>
+    </radialGradient>
+    <radialGradient id="vru-brillo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="vru-letras" x1="0" y1="106" x2="0" y2="126" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.45" stop-color="#d9ffb0"/>
+      <stop offset="1" stop-color="#5fb83a"/>
+    </linearGradient>
+    <clipPath id="vru-esfera"><circle cx="60" cy="52" r="40"/></clipPath>
+    <clipPath id="vru-delante"><rect x="0" y="52" width="120" height="60"/></clipPath>
+    <filter id="vru-halo" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feMorphology in="SourceAlpha" operator="dilate" radius="1" result="a"/>
+      <feGaussianBlur in="a" stdDeviation="3.5" result="b"/>
+      <feFlood flood-color="#8dff2e" flood-opacity="0.85"/>
+      <feComposite in2="b" operator="in" result="c"/>
+      <feMerge><feMergeNode in="c"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <g filter="url(#vru-halo)">
+    <!-- Órbita (parte trasera) -->
+    <g transform="rotate(-16 60 52)">
+      <ellipse cx="60" cy="52" rx="55" ry="11" fill="none" stroke="#d9ffb0" stroke-width="2" opacity="0.55"/>
+    </g>
+    <!-- Planeta -->
+    <circle cx="60" cy="52" r="40" fill="url(#vru-base)"/>
+    <g clip-path="url(#vru-esfera)">
+      <path d="M18 30 Q40 22 60 30 T102 28 V38 Q80 44 60 38 T18 42 Z" fill="#e9ffc2" opacity="0.45"/>
+      <path d="M18 50 Q36 44 58 52 T102 50 V58 Q82 64 60 57 T18 60 Z" fill="#2f6b17" opacity="0.4"/>
+      <path d="M18 66 Q42 60 62 68 T102 66 V74 Q78 80 58 72 T18 76 Z" fill="#e9ffc2" opacity="0.35"/>
+      <path d="M22 44 Q46 40 70 46 Q86 50 98 44" fill="none" stroke="#f4ffd9" stroke-width="1.6" stroke-linecap="round" opacity="0.6"/>
+      <path d="M26 84 Q50 78 74 86" fill="none" stroke="#2f6b17" stroke-width="2" stroke-linecap="round" opacity="0.4"/>
+      <circle cx="60" cy="52" r="40" fill="url(#vru-sombra)"/>
+      <ellipse cx="45" cy="34" rx="14" ry="9" fill="url(#vru-brillo)" opacity="0.7"/>
+    </g>
+    <circle cx="60" cy="52" r="40" fill="none" stroke="#173d0c" stroke-width="1.2"/>
+    <circle cx="60" cy="52" r="38.6" fill="none" stroke="#ffffff" stroke-width="0.8" opacity="0.35"/>
+    <!-- Órbita (parte delantera) -->
+    <g transform="rotate(-16 60 52)">
+      <ellipse cx="60" cy="52" rx="55" ry="11" fill="none" stroke="#d9ffb0" stroke-width="2.4" clip-path="url(#vru-delante)"/>
+    </g>
+    <!-- Siglas -->
+    <path d="M50.47 106 43.44 125.8H37.4L30.38 106H35.51L40.42 120.95L45.36 106ZM63.7 125.8 59.58 118.33H58.42V125.8H53.6V106H61.69Q64.03 106 65.68 106.82Q67.33 107.64 68.15 109.06Q68.97 110.49 68.97 112.23Q68.97 114.21 67.86 115.76Q66.74 117.31 64.57 117.96L69.14 125.8ZM58.42 114.91H61.41Q62.74 114.91 63.4 114.27Q64.06 113.62 64.06 112.43Q64.06 111.3 63.4 110.65Q62.74 110.01 61.41 110.01H58.42ZM77.86 106V117.85Q77.86 119.62 78.73 120.58Q79.61 121.54 81.3 121.54Q82.99 121.54 83.89 120.58Q84.8 119.62 84.8 117.85V106H89.62V117.82Q89.62 120.47 88.49 122.3Q87.36 124.14 85.46 125.07Q83.55 126 81.21 126Q78.87 126 77.02 125.08Q75.18 124.17 74.1 122.32Q73.03 120.47 73.03 117.82V106Z" fill="url(#vru-letras)" stroke="#173d0c" stroke-width="1.2" stroke-linejoin="round" paint-order="stroke"/>
+  </g>
+</svg>

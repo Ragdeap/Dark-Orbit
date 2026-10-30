@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 136" width="360" height="408">
+  <defs>
+    <radialGradient id="mmo-base" cx="0.38" cy="0.34" r="0.75">
+      <stop offset="0" stop-color="#ffb27a"/>
+      <stop offset="0.5" stop-color="#d4472a"/>
+      <stop offset="1" stop-color="#4d0f08"/>
+    </radialGradient>
+    <radialGradient id="mmo-sombra" cx="0.32" cy="0.28" r="0.95">
+      <stop offset="0.45" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.6"/>
+    </radialGradient>
+    <radialGradient id="mmo-brillo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="mmo-letras" x1="0" y1="106" x2="0" y2="126" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.45" stop-color="#ffc8a6"/>
+      <stop offset="1" stop-color="#d4472a"/>
+    </linearGradient>
+    <clipPath id="mmo-esfera"><circle cx="60" cy="52" r="40"/></clipPath>
+    <clipPath id="mmo-delante"><rect x="0" y="52" width="120" height="60"/></clipPath>
+    <filter id="mmo-halo" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feMorphology in="SourceAlpha" operator="dilate" radius="1" result="a"/>
+      <feGaussianBlur in="a" stdDeviation="3.5" result="b"/>
+      <feFlood flood-color="#ff3a20" flood-opacity="0.85"/>
+      <feComposite in2="b" operator="in" result="c"/>
+      <feMerge><feMergeNode in="c"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <g filter="url(#mmo-halo)">
+    <!-- Órbita (parte trasera) -->
+    <g transform="rotate(-16 60 52)">
+      <ellipse cx="60" cy="52" rx="55" ry="11" fill="none" stroke="#ffc8a6" stroke-width="2" opacity="0.55"/>
+    </g>
+    <!-- Planeta -->
+    <circle cx="60" cy="52" r="40" fill="url(#mmo-base)"/>
+    <g clip-path="url(#mmo-esfera)">
+      <path d="M40 15 Q60 9 80 15 Q72 22 60 21 Q48 22 40 15 Z" fill="#fff1e6" opacity="0.9"/>
+      <path d="M26 54 Q42 48 58 55 Q74 61 92 52" fill="none" stroke="#5a1209" stroke-width="2.4" stroke-linecap="round" opacity="0.7"/>
+      <circle cx="44" cy="38" r="6" fill="#8e2414" opacity="0.6"/>
+      <circle cx="43" cy="37" r="6" fill="none" stroke="#ffc49a" stroke-width="0.8" opacity="0.6"/>
+      <circle cx="74" cy="70" r="8" fill="#8e2414" opacity="0.55"/>
+      <circle cx="73" cy="69" r="8" fill="none" stroke="#ffc49a" stroke-width="0.8" opacity="0.5"/>
+      <circle cx="68" cy="34" r="3.5" fill="#8e2414" opacity="0.6"/>
+      <circle cx="40" cy="70" r="4" fill="#8e2414" opacity="0.5"/>
+      <path d="M50 76 Q58 70 66 80 Q60 86 50 76 Z" fill="#a8341c" opacity="0.6"/>
+      <circle cx="60" cy="52" r="40" fill="url(#mmo-sombra)"/>
+      <ellipse cx="45" cy="34" rx="14" ry="9" fill="url(#mmo-brillo)" opacity="0.7"/>
+    </g>
+    <circle cx="60" cy="52" r="40" fill="none" stroke="#4d0f08" stroke-width="1.2"/>
+    <circle cx="60" cy="52" r="38.6" fill="none" stroke="#ffffff" stroke-width="0.8" opacity="0.35"/>
+    <!-- Órbita (parte delantera) -->
+    <g transform="rotate(-16 60 52)">
+      <ellipse cx="60" cy="52" rx="55" ry="11" fill="none" stroke="#ffc8a6" stroke-width="2.4" clip-path="url(#mmo-delante)"/>
+    </g>
+    <!-- Siglas -->
+    <path d="M45.86 106.28V125.81H41.1V114.09L36.73 125.81H32.89L28.5 114.07V125.81H23.74V106.28H29.36L34.84 119.8L40.26 106.28ZM72.5 106.28V125.81H67.75V114.09L63.38 125.81H59.54L55.15 114.07V125.81H50.39V106.28H56.01L61.49 119.8L66.91 106.28ZM76.23 115.99Q76.23 113.12 77.58 110.84Q78.93 108.56 81.22 107.28Q83.52 106 86.27 106Q89.03 106 91.32 107.28Q93.62 108.56 94.94 110.84Q96.26 113.12 96.26 115.99Q96.26 118.85 94.92 121.15Q93.59 123.44 91.31 124.72Q89.03 126 86.27 126Q83.52 126 81.22 124.72Q78.93 123.44 77.58 121.15Q76.23 118.85 76.23 115.99ZM91.42 115.99Q91.42 113.4 90.01 111.86Q88.61 110.31 86.27 110.31Q83.91 110.31 82.5 111.84Q81.1 113.37 81.1 115.99Q81.1 118.57 82.5 120.12Q83.91 121.66 86.27 121.66Q88.61 121.66 90.01 120.1Q91.42 118.55 91.42 115.99Z" fill="url(#mmo-letras)" stroke="#4d0f08" stroke-width="1.2" stroke-linejoin="round" paint-order="stroke"/>
+  </g>
+</svg>

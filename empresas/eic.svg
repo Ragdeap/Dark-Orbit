@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 136" width="360" height="408">
+  <defs>
+    <radialGradient id="eic-base" cx="0.38" cy="0.34" r="0.75">
+      <stop offset="0" stop-color="#9be4ff"/>
+      <stop offset="0.5" stop-color="#1f7fe0"/>
+      <stop offset="1" stop-color="#0a2766"/>
+    </radialGradient>
+    <radialGradient id="eic-sombra" cx="0.32" cy="0.28" r="0.95">
+      <stop offset="0.45" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.6"/>
+    </radialGradient>
+    <radialGradient id="eic-brillo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="eic-letras" x1="0" y1="106" x2="0" y2="126" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.45" stop-color="#bfe9ff"/>
+      <stop offset="1" stop-color="#1f7fe0"/>
+    </linearGradient>
+    <clipPath id="eic-esfera"><circle cx="60" cy="52" r="40"/></clipPath>
+    <clipPath id="eic-delante"><rect x="0" y="52" width="120" height="60"/></clipPath>
+    <filter id="eic-halo" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feMorphology in="SourceAlpha" operator="dilate" radius="1" result="a"/>
+      <feGaussianBlur in="a" stdDeviation="3.5" result="b"/>
+      <feFlood flood-color="#2f7bff" flood-opacity="0.85"/>
+      <feComposite in2="b" operator="in" result="c"/>
+      <feMerge><feMergeNode in="c"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <g filter="url(#eic-halo)">
+    <!-- Órbita (parte trasera) -->
+    <g transform="rotate(-16 60 52)">
+      <ellipse cx="60" cy="52" rx="55" ry="11" fill="none" stroke="#bfe9ff" stroke-width="2" opacity="0.55"/>
+    </g>
+    <!-- Planeta -->
+    <circle cx="60" cy="52" r="40" fill="url(#eic-base)"/>
+    <g clip-path="url(#eic-esfera)">
+      <path d="M30 30 Q38 22 48 26 Q52 33 46 38 Q40 40 42 47 Q38 54 31 50 Q26 42 30 30 Z" fill="#46c6a0" opacity="0.9"/>
+      <path d="M58 20 Q70 16 80 22 Q84 30 76 33 Q70 31 66 36 Q60 33 58 20 Z" fill="#46c6a0" opacity="0.9"/>
+      <path d="M62 46 Q74 42 84 50 Q88 62 80 72 Q72 80 66 72 Q68 62 62 58 Q58 52 62 46 Z" fill="#46c6a0" opacity="0.9"/>
+      <path d="M38 64 Q44 62 48 68 Q46 76 40 78 Q34 72 38 64 Z" fill="#46c6a0" opacity="0.9"/>
+      <path d="M24 40 Q40 36 56 41 M50 60 Q68 56 92 62 M30 76 Q50 72 70 82" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" opacity="0.55"/>
+      <circle cx="60" cy="52" r="40" fill="url(#eic-sombra)"/>
+      <ellipse cx="45" cy="34" rx="14" ry="9" fill="url(#eic-brillo)" opacity="0.7"/>
+    </g>
+    <circle cx="60" cy="52" r="40" fill="none" stroke="#0a2766" stroke-width="1.2"/>
+    <circle cx="60" cy="52" r="38.6" fill="none" stroke="#ffffff" stroke-width="0.8" opacity="0.35"/>
+    <!-- Órbita (parte delantera) -->
+    <g transform="rotate(-16 60 52)">
+      <ellipse cx="60" cy="52" rx="55" ry="11" fill="none" stroke="#bfe9ff" stroke-width="2.4" clip-path="url(#eic-delante)"/>
+    </g>
+    <!-- Siglas -->
+    <path d="M42.78 110.06V114.03H49.19V117.72H42.78V122.03H50.03V125.86H38V106.22H50.03V110.06ZM59.03 106.22V125.86H54.25V106.22ZM72.69 106Q76.18 106 78.67 107.85Q81.16 109.69 82 112.88H76.74Q76.15 111.65 75.08 111.01Q74 110.36 72.63 110.36Q70.42 110.36 69.05 111.9Q67.68 113.44 67.68 116.01Q67.68 118.59 69.05 120.13Q70.42 121.66 72.63 121.66Q74 121.66 75.08 121.02Q76.15 120.38 76.74 119.15H82Q81.16 122.34 78.67 124.17Q76.18 126 72.69 126Q69.83 126 67.58 124.73Q65.33 123.45 64.07 121.19Q62.81 118.92 62.81 116.01Q62.81 113.1 64.07 110.83Q65.33 108.55 67.58 107.27Q69.83 106 72.69 106Z" fill="url(#eic-letras)" stroke="#0a2766" stroke-width="1.2" stroke-linejoin="round" paint-order="stroke"/>
+  </g>
+</svg>

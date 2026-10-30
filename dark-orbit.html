@@ -1287,7 +1287,9 @@
       ctx.font = '13px Consolas, monospace';
       ctx.textAlign = 'center';
       ctx.fillText(b.name, x, y + 16 + 22);
-      if (b.rank != null) drawRank(b.rank, x - ctx.measureText(b.name).width / 2 - 4, y + 16 + 22 - 6);
+      const nameW = ctx.measureText(b.name).width;
+      if (b.rank != null) drawRank(b.rank, x - nameW / 2 - 4, y + 16 + 22 - 6);
+      drawCompany(b.company, x + nameW / 2 + 4, y + 16 + 22 - 6);
       ctx.textAlign = 'left';
     }
   }
@@ -1395,6 +1397,22 @@
     ctx.drawImage(img, right - w, cy - h / 2, w, h);
   }
 
+  // Logo de cada empresa, a la derecha del nombre
+  const logoImgs = {};
+  for (const [company, file] of Object.entries({ VRU: 'vru', EIC: 'eic', MMO: 'mmo' })) {
+    const img = new Image();
+    img.src = 'empresas/' + file + '.svg';
+    logoImgs[company] = img;
+  }
+
+  // Dibuja el logo de la empresa con su borde izquierdo en `left`, centrado en `cy`, con la misma altura que el icono de rango
+  function drawCompany(company, left, cy) {
+    const img = logoImgs[company];
+    if (!img || !img.complete || !img.naturalWidth) return;
+    const h = 18, w = h * img.naturalWidth / img.naturalHeight;
+    ctx.drawImage(img, left, cy - h / 2, w, h);
+  }
+
   // Reparto de rangos por empresa, de mayor a menor. `n` = jugadores fijos; `pct` = % de la empresa (mínimo 1).
   // `rank` es el índice en RANKS
   const RANK_TABLE = [
@@ -1457,7 +1475,9 @@
     ctx.strokeText(PLAYER_NAME, cx, cy + 36);
     ctx.fillStyle = '#ffffff';
     ctx.fillText(PLAYER_NAME, cx, cy + 36);
-    if (p.rank != null) drawRank(p.rank, cx - ctx.measureText(PLAYER_NAME).width / 2 - 4, cy + 36 - 6);
+    const nameW = ctx.measureText(PLAYER_NAME).width;
+    if (p.rank != null) drawRank(p.rank, cx - nameW / 2 - 4, cy + 36 - 6);
+    drawCompany(p.company, cx + nameW / 2 + 4, cy + 36 - 6);
     ctx.restore();
   }
 
