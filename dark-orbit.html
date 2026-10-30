@@ -53,8 +53,8 @@
     // passive: solo atacan si se les dispara. flee: huyen al bajar a esa fracción de vida.
     streuner: { name: 'Streuner', sides: 4, r: 16, hp: 800,  shield: 400,  speed: 90,  dmg: 20, range: 260, aggro: 350, cool: 1.6, shots: 1, rewards: { exp: 400, honor: 2, credits: 400, uridium: 1, cargo: { prometium: 10, terbium: 10 } }, color: '#e0553f', passive: true },
     // Variantes del Streuner (velocidad, daño y recompensa provisionales)
-    recruit:  { name: 'Recruit Streuner', sides: 4, r: 18, hp: 600,  shield: 800,  speed: 100, dmg: 40, range: 280, aggro: 380, cool: 1.4, shots: 1, rewards: money(30), color: '#e07a3f', flee: 0.2 },
-    aider:    { name: 'Aider Streuner',   sides: 5, r: 15, hp: 1500, shield: 1000, speed: 110, dmg: 70, range: 320, aggro: 300, cool: 2.0, shots: 1, rewards: money(25), color: '#6fd3a0', passive: true },
+    recruit:  { name: 'Recruit Streuner', sides: 4, r: 18, hp: 600,  shield: 800,  speed: 100, dmg: 40, range: 280, aggro: 380, cool: 1.4, shots: 1, rewards: { exp: 500, honor: 3, credits: 500, uridium: 2, cargo: { prometium: 12, terbium: 12 } }, color: '#e07a3f', flee: 0.2 },
+    aider:    { name: 'Aider Streuner',   sides: 5, r: 15, hp: 1500, shield: 1000, speed: 110, dmg: 70, range: 320, aggro: 300, cool: 2.0, shots: 1, rewards: { exp: 700, honor: 4, credits: 700, uridium: 2, cargo: { prometium: 15, terbium: 15 } }, color: '#6fd3a0', passive: true },
     lordakia: { name: 'Lordakia', sides: 3, r: 18, hp: 110, shield: 0, speed: 160, dmg: 8,  range: 300, aggro: 450, cool: 1.2, shots: 1, rewards: money(40),  color: '#c94cff' },
     mordon:   { name: 'Mordon',   sides: 8, r: 26, hp: 260, shield: 0, speed: 70, dmg: 14, range: 420, aggro: 520, cool: 2.2, shots: 3, rewards: money(90),  color: '#ff9f1c' },
     saimon:   { name: 'Saimon',   sides: 6, r: 30, hp: 420, shield: 0, speed: 100, dmg: 18, range: 480, aggro: 600, cool: 1.8, shots: 2, rewards: money(150), color: '#2ec4b6' },
@@ -317,10 +317,11 @@
   }
 
   function hitAlien(a, dmg) {
-    // El escudo absorbe primero; la vida solo recibe el resto
-    const abs = Math.min(a.shield, dmg);
-    a.shield -= abs;
-    a.hp -= dmg - abs;
+    // Con escudo, el 80 % del daño va al escudo y el 20 % a la vida; si el escudo no alcanza, el resto pasa a la vida.
+    // Sin escudo, todo el daño va a la vida.
+    const toShield = a.shield > 0 ? Math.min(a.shield, Math.floor(dmg * 0.8)) : 0;
+    a.shield -= toShield;
+    a.hp -= dmg - toShield;
     spawnText(a.x, a.y - ALIEN[a.type].r - 6, Math.round(dmg), '#ff4d4d');
     a.aggro = true;
     a.hit = 0.1;
@@ -492,7 +493,7 @@
       g.bullets.push({
         x: p.x + Math.cos(ang) * 18, y: p.y + Math.sin(ang) * 18,
         vx: Math.cos(ang) * a.speed, vy: Math.sin(ang) * a.speed,
-        life: a.life, dmg: Math.floor((laserDamage(target) + p.damage) * a.mult), color: a.color,
+        life: a.life, dmg: Math.floor(laserDamage(target) * rnd(0.9, 1) * a.mult), color: a.color,
         target,
       });
     }
@@ -795,12 +796,13 @@
         ctx.strokeStyle = g.p.attacking ? '#ff4d6d' : '#ffd166';
         ctx.lineWidth = 1.5;
         ctx.stroke();
-        ctx.fillStyle = '#ffd1dc';
-        ctx.font = '11px Consolas, monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText(t.name, x, y + t.r + 22);
-        ctx.textAlign = 'left';
       }
+      // Nombre del NPC siempre visible, bajo el NPC
+      ctx.fillStyle = '#ff3b3b';
+      ctx.font = '11px Consolas, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(`..::{ ${t.name} }::..`, x, y + t.r + 22);
+      ctx.textAlign = 'left';
     }
   }
 

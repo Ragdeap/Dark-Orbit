@@ -10,8 +10,8 @@ Estados: **Confirmado** = dato del usuario. **Provisional** = valor propio pendi
 | NPC | Mapas | Vida | Escudo | Recompensas | Estado |
 |---|---|---|---|---|---|
 | Streuner | 3-1 | 800 | 400 | Ver tabla de recompensas | Vida, escudo y recompensas confirmados; velocidad y alcance provisionales |
-| Recruit Streuner | 3-1 | 600 | 800 | 30 créditos | Vida/escudo confirmados; resto provisional |
-| Aider Streuner | 3-1 | 1500 | 1000 | 25 créditos | Vida/escudo confirmados; resto provisional |
+| Recruit Streuner | 3-1 | 600 | 800 | 500 exp, 3 honor, 500 créditos, 2 uridium + caja | Vida, escudo y recompensas confirmados; velocidad, alcance y cadencia provisionales |
+| Aider Streuner | 3-1 | 1500 | 1000 | 700 exp, 4 honor, 700 créditos, 2 uridium + caja | Vida, escudo y recompensas confirmados; velocidad, alcance y cadencia provisionales |
 | Lordakia | — (sin mapa asignado) | 110 | 0 | 40 créditos | Provisional |
 | Mordon | — (sin mapa asignado) | 260 | 0 | 90 créditos | Provisional |
 | Saimon | — (sin mapa asignado) | 420 | 0 | 150 créditos | Provisional |
@@ -23,13 +23,13 @@ Las recompensas son fijas y se otorgan al destruir al NPC.
 | NPC | Experiencia | Honor | Créditos | Uridium | Caja de carga |
 |---|---|---|---|---|---|
 | Streuner | 400 | 2 | 400 | 1 | 10 Prometium + 10 Terbium |
-| Recruit Streuner | — | — | 30 (provisional) | — | — |
-| Aider Streuner | — | — | 25 (provisional) | — | — |
+| Recruit Streuner | 500 | 3 | 500 | 2 | 12 Prometium + 12 Terbium |
+| Aider Streuner | 700 | 4 | 700 | 2 | 15 Prometium + 15 Terbium |
 | Lordakia | — | — | 40 (provisional) | — | — |
 | Mordon | — | — | 90 (provisional) | — | — |
 | Saimon | — | — | 150 (provisional) | — | — |
 
-- **Caja de carga:** aparece en el lugar donde murió el NPC y desaparece si no se recoge. Hay que hacer clic sobre ella: la nave viaja hasta la caja y la recoge al llegar, sumando sus 10 Prometium y 10 Terbium al inventario.
+- **Caja de carga:** es garantizada. Cada NPC que tiene caja en su ficha la suelta siempre al morir, con la cantidad indicada. Aparece en el lugar donde murió el NPC y desaparece si no se recoge. Hay que hacer clic sobre ella: la nave viaja hasta la caja y la recoge al llegar, sumando sus 10 Prometium y 10 Terbium al inventario.
 - Los datos de Recruit, Aider, Lordakia, Mordon y Saimon son provisionales y tienen que confirmarse.
 
 ## Estadísticas completas
@@ -85,6 +85,6 @@ Las recompensas son fijas y se otorgan al destruir al NPC.
 
 ## Pendiente de validar
 
-- Velocidad, alcance, cadencia y recompensa de Recruit Streuner y Aider Streuner. Su daño máximo ya está confirmado (40 y 70).
+- Velocidad, alcance y cadencia de Recruit Streuner y Aider Streuner. Su daño máximo ya está confirmado (40 y 70).
 - Estadísticas de Lordakia, Mordon y Saimon, y en qué mapas aparecen.
 - Equilibrio general: el láser LF-1 (12 de daño) tarda mucho en vaciar a los NPC del 3-1.
