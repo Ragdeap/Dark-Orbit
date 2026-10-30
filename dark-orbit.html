@@ -1127,6 +1127,12 @@
       ctx.fillStyle = '#ffd166';
       ctx.fillRect(ox + portal.x * s - 2, oy + portal.y * s - 2, 4, 4);
     }
+    const base = z.base;
+    ctx.strokeStyle = 'rgba(140,255,170,0.8)';
+    ctx.beginPath();
+    ctx.arc(ox + base.x * s, oy + base.y * s, Math.max(2, base.r * s), 0, Math.PI * 2);
+    ctx.stroke();
+
     // Líneas finas que marcan la posición del jugador; su cruce es la nave
     const px = ox + g.p.x * s, py = oy + g.p.y * s;
     ctx.lineWidth = 1;
@@ -1137,6 +1143,21 @@
     ctx.stroke();
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(px - 2, py - 2, 4, 4);
+
+    // Destino marcado desde el minimapa; desaparece al llegar o al dar otro destino.
+    // La línea va de la nave al destino, así que se acorta según se avanza
+    if (g.mmDest && g.p.tx === g.mmDest.x && g.p.ty === g.mmDest.y) {
+      const dx = ox + g.p.tx * s, dy = oy + g.p.ty * s;
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(77,166,255,0.6)';
+      ctx.beginPath();
+      ctx.moveTo(px, py); ctx.lineTo(dx, dy);
+      ctx.stroke();
+      ctx.fillStyle = '#4da6ff';
+      ctx.beginPath();
+      ctx.arc(dx, dy, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     // Mapa actual a la izquierda y coordenadas de la nave a la derecha, en unidades
     ctx.fillStyle = '#cfe8ff';
@@ -1246,6 +1267,7 @@
     if (e.clientX >= mm.mx && e.clientX <= mm.mx + mm.mw && e.clientY >= mm.my && e.clientY <= mm.my + mm.mh) {
       g.p.tx = clamp((e.clientX - mm.ox) / mm.s, 0, g.zone.w);
       g.p.ty = clamp((e.clientY - mm.oy) / mm.s, 0, g.zone.h);
+      g.mmDest = { x: g.p.tx, y: g.p.ty };
       return;
     }
     const wx = e.clientX - W / 2 + g.p.x;
