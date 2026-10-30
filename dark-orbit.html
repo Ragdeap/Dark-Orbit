@@ -1127,8 +1127,16 @@
       ctx.fillStyle = '#ffd166';
       ctx.fillRect(ox + portal.x * s - 2, oy + portal.y * s - 2, 4, 4);
     }
+    // Líneas finas que marcan la posición del jugador; su cruce es la nave
+    const px = ox + g.p.x * s, py = oy + g.p.y * s;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.beginPath();
+    ctx.moveTo(px + 0.5, my); ctx.lineTo(px + 0.5, my + mh);
+    ctx.moveTo(mx, py + 0.5); ctx.lineTo(mx + mw, py + 0.5);
+    ctx.stroke();
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(ox + g.p.x * s - 2, oy + g.p.y * s - 2, 4, 4);
+    ctx.fillRect(px - 2, py - 2, 4, 4);
 
     // Coordenadas de la nave en unidades, con el origen arriba a la izquierda
     ctx.fillStyle = '#cfe8ff';
