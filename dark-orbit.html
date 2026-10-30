@@ -1,0 +1,1325 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dark Orbit Local</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #03040a; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+(() => {
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  let W = 0, H = 0;
+  function resize() { W = canvas.width = innerWidth; H = canvas.height = innerHeight; }
+  addEventListener('resize', resize);
+  resize();
+
+  // ---------- Utilidades ----------
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const mod = (a, b) => ((a % b) + b) % b;
+  const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+  // ---------- Datos ----------
+  // Tamaño de los mapas: 420 x 270 unidades, con 1 unidad = 12 px. Todos los mapas usan
+  // este tamaño salvo que se indique otro en su entrada de ZONES. Los límites son duros.
+  const UNIT_PX = 12;
+  const MAP_W = 420 * UNIT_PX, MAP_H = 270 * UNIT_PX;
+
+  // Facciones: MMO (Marte, mapas 1-X), EIC (Tierra, 2-X) y VRU (Venus, 3-X).
+  // Los mapas 1-X y 2-X se añadirán más adelante. El planeta se atenúa (alpha)
+  // a medida que el mapa se aleja de la base de su facción.
+  const ZONES = [
+    {
+      id: '3-1', name: '3-1 · VRU', faction: 'VRU', w: MAP_W, h: MAP_H,
+      types: ['streuner', 'recruit', 'aider'],
+      bgTop: '#0c2a1a', bgBottom: '#02080a',
+      base: { x: 300, y: MAP_H / 2, r: 250 },
+      planet: { x: 3900, y: 900, r: 700, alpha: 1 },
+    },
+  ];
+
+  // Recompensa solo en créditos (provisional para los NPC cuyas recompensas aún no están confirmadas)
+  const money = credits => ({ exp: 0, honor: 0, credits, uridium: 0, cargo: null });
+
+  const ALIEN = {
+    // passive: solo atacan si se les dispara. flee: huyen al bajar a esa fracción de vida.
+    streuner: { name: 'Streuner', sides: 4, r: 16, hp: 800,  shield: 400,  speed: 90,  dmg: 20, range: 260, aggro: 350, cool: 1.6, shots: 1, rewards: { exp: 400, honor: 2, credits: 400, uridium: 1, cargo: { prometium: 10, terbium: 10 } }, color: '#e0553f', passive: true },
+    // Variantes del Streuner (velocidad, daño y recompensa provisionales)
+    recruit:  { name: 'Recruit Streuner', sides: 4, r: 18, hp: 600,  shield: 800,  speed: 100, dmg: 40, range: 280, aggro: 380, cool: 1.4, shots: 1, rewards: money(30), color: '#e07a3f', flee: 0.2 },
+    aider:    { name: 'Aider Streuner',   sides: 5, r: 15, hp: 1500, shield: 1000, speed: 110, dmg: 70, range: 320, aggro: 300, cool: 2.0, shots: 1, rewards: money(25), color: '#6fd3a0', passive: true },
+    lordakia: { name: 'Lordakia', sides: 3, r: 18, hp: 110, shield: 0, speed: 160, dmg: 8,  range: 300, aggro: 450, cool: 1.2, shots: 1, rewards: money(40),  color: '#c94cff' },
+    mordon:   { name: 'Mordon',   sides: 8, r: 26, hp: 260, shield: 0, speed: 70, dmg: 14, range: 420, aggro: 520, cool: 2.2, shots: 3, rewards: money(90),  color: '#ff9f1c' },
+    saimon:   { name: 'Saimon',   sides: 6, r: 30, hp: 420, shield: 0, speed: 100, dmg: 18, range: 480, aggro: 600, cool: 1.8, shots: 2, rewards: money(150), color: '#2ec4b6' },
+  };
+
+  // Base de datos de naves. Para añadir una nave basta con añadir una entrada aquí;
+  // sus ranuras de láser se crean automáticamente.
+  const SHIPS = {
+    PHOENIX: { name: 'Phoenix', hp: 104000, speed: 320, slots: 1, genSlots: 1, cargo: 100 },
+  };
+  // Base de datos de láseres. Son distintos de la munición.
+  const LASERS = {
+    LF1: { name: 'LF-1', damage: 65 },
+    LF2: { name: 'LF-2', damage: 140 },
+    LF3: { name: 'LF-3', damage: 175 },
+    LF4: { name: 'LF-4', damage: 200 },
+    // Daño variable: en cada disparo tira un valor entre min y damage (el máximo)
+    LF4X: { name: 'LF-4 Inestable', min: 128, damage: 220 },
+    // Cada láser de este tipo equipado sube la vida máxima un 0,5 %
+    LF4H: { name: 'LF-4 Hyperplasmoid', damage: 225, hpBonus: 0.005 },
+    // Cada láser de este tipo suma 5 de daño extra contra jugadores (no contra NPC)
+    LF4M: { name: 'LF-4 Magmadrill', damage: 230, playerBonus: 5 },
+    // Cada láser de este tipo suma 5 de daño extra contra NPC (no contra jugadores)
+    LF4P: { name: 'LF-4 Paritydrill', damage: 230, npcBonus: 5 },
+  };
+
+  // Base de datos de generadores de escudo. Absorben un porcentaje de cada golpe
+  // mientras les quede reserva de escudo.
+  const GENERATORS = {
+    SG3N_A01: { name: 'SG3N-A01', shield: 1000, absorb: 0.4 },
+    SG3N_A02: { name: 'SG3N-A02', shield: 2000, absorb: 0.5 },
+    SG3N_A03: { name: 'SG3N-A03', shield: 5000, absorb: 0.6 },
+    SG3N_B00: { name: 'SG3N-B00', shield: 9000, absorb: 0.7 },
+    SG3N_B01: { name: 'SG3N-B01', shield: 9500, absorb: 0.7 },
+    SG3N_B02: { name: 'SG3N-B02', shield: 10000, absorb: 0.8 },
+    SG3N_B03: { name: 'SG3N-B03', shield: 11450, absorb: 0.8 },
+  };
+
+  // Munición: el daño es el daño base del láser multiplicado por mult
+  const AMMO = {
+    LCB10:  { name: 'LCB-10',  mult: 1, cool: 0.25, speed: 900, life: 1.0, shots: 1, spread: 0, color: '#ff4d4d' },
+    MCB25:  { name: 'MCB-25',  mult: 2, cool: 0.25, speed: 900, life: 1.0, shots: 1, spread: 0, color: '#4da6ff' },
+    MCB50:  { name: 'MCB-50',  mult: 3, cool: 0.25, speed: 900, life: 1.0, shots: 1, spread: 0, color: '#4dff6a' },
+    UCB100: { name: 'UCB-100', mult: 4, cool: 0.25, speed: 900, life: 1.0, shots: 1, spread: 0, color: '#fff7c2' },
+    RSB75:  { name: 'RSB-75',  mult: 6, cool: 0.25, speed: 900, life: 1.0, shots: 1, spread: 0, color: '#ff9f1a' },
+  };
+  // Barra de acción: 10 casillas. De momento solo las 5 primeras tienen munición.
+  // attack: la casilla inicia el ataque si hay un NPC fijado (en el futuro habrá casillas sin ataque)
+  const BAR = [
+    { ammo: 'LCB10', attack: true }, { ammo: 'MCB25', attack: true }, { ammo: 'MCB50', attack: true },
+    { ammo: 'UCB100', attack: true }, { ammo: 'RSB75', attack: true },
+    null, null, null, null, null,
+  ];
+  const BAR_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'];
+  const SLOT = 60, GAP = 8;
+
+  const RANGE = 480;
+  const MISS_CHANCE = 0.2;   // probabilidad de que un disparo de NPC falle
+  const ALIEN_CAP = 18;
+  const SPAWN_SAFE = 600;
+
+  const UPGRADES = [
+    { key: 'F1', label: 'Daño',      lvl: 'dmg', apply: p => { p.damage += 4; } },
+    { key: 'F2', label: 'Casco',     lvl: 'hp', apply: p => { p.maxHp += 25; p.hp += 25; } },
+    { key: 'F3', label: 'Velocidad', lvl: 'spd', apply: p => { p.speed += 20; } },
+  ];
+  const upgradeCost = lvl => 100 + 60 * lvl;
+
+  // Misiones en orden: cada una pide matar cierta cantidad de un tipo de NPC.
+  const MISSIONS = [
+    { text: 'Elimina 8 Streuner',         type: 'streuner', count: 8, reward: 200 },
+    { text: 'Elimina 6 Recruit Streuner', type: 'recruit',  count: 6, reward: 350 },
+    { text: 'Elimina 6 Aider Streuner',   type: 'aider',    count: 6, reward: 350 },
+  ];
+
+  // ---------- Estado ----------
+  let g;
+  function newState() {
+    return {
+      p: {
+        x: 0, y: 0, vx: 0, vy: 0, angle: 0, speed: SHIPS.PHOENIX.speed,
+        hp: SHIPS.PHOENIX.hp, maxHp: SHIPS.PHOENIX.hp,
+        shield: 0, maxShield: 0, absorb: 0,
+        damage: 0, cool: 0, ammo: 'LCB10',  // damage: bonus de las mejoras, se suma al de los láseres
+        target: null, tx: null, ty: null, dead: false, respawnT: 0,
+        attacking: false,
+      },
+      up: { dmg: 0, hp: 0, spd: 0 },
+      zi: 0, zone: ZONES[0],
+      aliens: [], bullets: [], enemyShots: [], pickups: [], parts: [], texts: [],
+      stars: Array.from({ length: 260 }, () => ({ x: Math.random(), y: Math.random(), z: rnd(0.2, 1) })),
+      credits: 0, uridium: 0, exp: 0, honor: 0, cargo: { prometium: 0, terbium: 0 },
+      mission: 0, kills: {},
+      banner: 0, bannerText: '', hitFlash: 0, paused: false,
+      safeT: 0, wasSafe: false,
+      shipId: 'PHOENIX',
+      equip: { PHOENIX: ['LF1'] },
+      generators: {},
+      hangar: { open: false, sel: { type: 'laser', i: 0 } },
+    };
+  }
+
+  function reset() {
+    g = newState();
+    setZone(0);
+  }
+
+  function setZone(i) {
+    g.zi = i;
+    g.zone = ZONES[i];
+    g.aliens = []; g.bullets = []; g.enemyShots = []; g.pickups = []; g.parts = [];
+    const p = g.p;
+    p.x = 300; p.y = g.zone.h / 2;
+    p.tx = null; p.ty = null; p.target = null; p.attacking = false;
+    showBanner(g.zone.name);
+  }
+
+  // Zona segura: la base y la zona alrededor del portal (su radio es mayor que el de cambio de mapa)
+  function inSafeZone() {
+    const p = g.p, z = g.zone;
+    if (dist(p.x, p.y, z.base.x, z.base.y) < z.base.r) return true;
+    const portal = portalOf(g.zi);
+    return !!portal && dist(p.x, p.y, portal.x, portal.y) < 200;
+  }
+
+  function showBanner(text) {
+    g.banner = 2.5;
+    g.bannerText = text;
+  }
+
+  function portalOf(zi) {
+    if (zi >= ZONES.length - 1) return null;
+    return { x: ZONES[zi].w - 200, y: ZONES[zi].h / 2 };
+  }
+
+  // ---------- Entidades ----------
+  function spawnAlien() {
+    const z = g.zone;
+    const type = z.types[Math.floor(Math.random() * z.types.length)];
+    let x, y, tries = 0;
+    do {
+      x = rnd(200, z.w - 200);
+      y = rnd(200, z.h - 200);
+      tries++;
+    } while (dist(x, y, z.base.x, z.base.y) < SPAWN_SAFE && tries < 20);
+    const t = ALIEN[type];
+    g.aliens.push({
+      type, x, y, home: { x, y }, vx: 0, vy: 0,
+      hp: t.hp, shield: t.shield, aggro: false, cool: rnd(0.5, 1.5),
+      wa: 0, wt: 0, hit: 0,
+    });
+  }
+
+  function nearestAlien(x, y, r) {
+    let best = null, bd = r;
+    for (const a of g.aliens) {
+      const d = dist(x, y, a.x, a.y);
+      if (d < bd) { bd = d; best = a; }
+    }
+    return best;
+  }
+
+  function spark(x, y, color, n = 6) {
+    for (let i = 0; i < n; i++) {
+      const a = rnd(0, Math.PI * 2), s = rnd(40, 200);
+      g.parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rnd(0.2, 0.5), max: 0.5, color, size: rnd(1, 3) });
+    }
+  }
+
+  function explode(x, y, r, color) {
+    for (let i = 0; i < 26; i++) {
+      const a = rnd(0, Math.PI * 2), s = rnd(60, 260);
+      g.parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rnd(0.4, 0.9), max: 0.9, color, size: rnd(2, Math.max(3, r * 0.25)) });
+    }
+  }
+
+  // Números de daño flotantes. onPlayer: x/y son relativos a la nave y no a la zona
+  function spawnText(x, y, text, color, onPlayer = false) {
+    g.texts.push({ x, y, text, color, onPlayer, life: 0.9, max: 0.9, vy: -40 });
+  }
+
+  function updateTexts(dt) {
+    for (const t of g.texts) { t.life -= dt; t.y += t.vy * dt; }
+    g.texts = g.texts.filter(t => t.life > 0);
+  }
+
+  function killAlien(a) {
+    const t = ALIEN[a.type];
+    explode(a.x, a.y, t.r, t.color);
+    playExplosionSound();
+    const r = t.rewards;
+    g.credits += r.credits;
+    g.uridium += r.uridium;
+    g.exp += r.exp;
+    g.honor += r.honor;
+    if (r.cargo) g.pickups.push({ x: a.x, y: a.y, type: 'cargo', cargo: r.cargo, life: 60 });
+    g.kills[a.type] = (g.kills[a.type] || 0) + 1;
+    if (Math.random() < 0.10) g.pickups.push({ x: a.x, y: a.y, type: 'repair', life: 20 });
+    if (g.p.target === a) { g.p.target = null; g.p.attacking = false; }
+    checkMission();
+  }
+
+  function checkMission() {
+    const m = MISSIONS[g.mission];
+    if (!m) return;
+    if ((g.kills[m.type] || 0) >= m.count) {
+      g.credits += m.reward;
+      g.mission++;
+      showBanner(`Misión completada: +${m.reward} créditos`);
+    }
+  }
+
+  function hitAlien(a, dmg) {
+    // El escudo absorbe primero; la vida solo recibe el resto
+    const abs = Math.min(a.shield, dmg);
+    a.shield -= abs;
+    a.hp -= dmg - abs;
+    spawnText(a.x, a.y - ALIEN[a.type].r - 6, Math.round(dmg), '#ff4d4d');
+    a.aggro = true;
+    a.hit = 0.1;
+    const t = ALIEN[a.type];
+    if (t.flee && a.hp > 0 && a.hp <= t.hp * t.flee) a.fleeing = true;
+    if (a.hp <= 0) { a.hp = 0; killAlien(a); }
+  }
+
+  function hurt(d) {
+    const p = g.p;
+    if (p.dead) return;
+    g.hitFlash = 0.12;
+    spawnText(0, -30, Math.round(d), '#b07cff', true);
+    // El escudo absorbe su porcentaje del golpe mientras le quede reserva; el resto va a la vida
+    const absorbed = Math.min(p.shield, Math.floor(d * p.absorb));
+    p.shield -= absorbed;
+    p.hp -= d - absorbed;
+    if (p.hp <= 0) {
+      p.hp = 0;
+      p.dead = true;
+      p.respawnT = 3;
+      p.target = null; p.tx = null; p.attacking = false;
+      explode(p.x, p.y, 22, '#7fd6ff');
+    }
+  }
+
+  // Generadores de una nave. Mismo criterio que las ranuras de láser.
+  function genOf(id = g.shipId) {
+    if (!g.generators[id]) g.generators[id] = Array(SHIPS[id].genSlots).fill(null);
+    return g.generators[id];
+  }
+
+  // Escudo total de los generadores equipados y su porcentaje de absorción (se toma el mayor)
+  function shieldStats() {
+    return genOf().reduce((s, id) => {
+      if (!id) return s;
+      s.max += GENERATORS[id].shield;
+      s.absorb = Math.max(s.absorb, GENERATORS[id].absorb);
+      return s;
+    }, { max: 0, absorb: 0 });
+  }
+
+  // Tras cambiar generadores: la capacidad nueva se llena al equipar y la reserva se ajusta al máximo
+  function refreshShield() {
+    const p = g.p, st = shieldStats();
+    const gained = Math.max(0, st.max - p.maxShield);
+    p.maxShield = st.max;
+    p.shield = Math.min(st.max, p.shield + gained);
+    p.absorb = st.absorb;
+  }
+
+  // Ranuras de láser de una nave. Las naves nuevas empiezan con todas vacías.
+  function equipOf(id = g.shipId) {
+    if (!g.equip[id]) g.equip[id] = Array(SHIPS[id].slots).fill(null);
+    return g.equip[id];
+  }
+
+  // Vida máxima con el bonus de los láseres equipados (p. ej. LF-4 Hyperplasmoid: +0,5 % cada uno)
+  function maxHpNow() {
+    const bonus = equipOf().reduce((sum, id) => sum + (id && LASERS[id].hpBonus ? LASERS[id].hpBonus : 0), 0);
+    return Math.floor(g.p.maxHp * (1 + bonus));
+  }
+
+  // Hay al menos un láser equipado en la nave activa (las ranuras pueden quedar vacías)
+  function hasLaser() {
+    return equipOf().some(id => id);
+  }
+
+  // Daño base del disparo: suma de los láseres equipados en la nave activa
+  // Cada láser puede tener bonus contra jugadores (playerBonus) o contra NPC (npcBonus)
+  function laserDamage(target) {
+    const vsPlayer = !!target.isPlayer;
+    return equipOf().reduce((sum, id) => {
+      if (!id) return sum;
+      const l = LASERS[id];
+      const base = l.min ? Math.floor(rnd(l.min, l.damage + 1)) : l.damage;
+      const bonus = vsPlayer ? (l.playerBonus || 0) : (l.npcBonus || 0);
+      return sum + base + bonus;
+    }, 0);
+  }
+
+  // Sonido de disparo generado con Web Audio (no necesita archivos). Mismo sonido para todos los láseres.
+  let audioCtx = null;
+  function playLaserSound() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const t = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(1400, t);
+      osc.frequency.exponentialRampToValueAtTime(300, t + 0.15);
+      gain.gain.setValueAtTime(0.06, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(t);
+      osc.stop(t + 0.16);
+    } catch (e) {
+      // Sin audio disponible: el juego sigue funcionando
+    }
+  }
+
+  // Explosión de un NPC en el espacio: sin aire no hay soplido, así que se combina
+  // un chasquido seco al inicio con un retumbo grave que se apaga despacio
+  function playExplosionSound() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const ctx = audioCtx, t = ctx.currentTime;
+
+      // 1. Chasquido: ruido corto y agudo
+      const crackLen = Math.floor(ctx.sampleRate * 0.08);
+      const crackBuf = ctx.createBuffer(1, crackLen, ctx.sampleRate);
+      const crackData = crackBuf.getChannelData(0);
+      for (let i = 0; i < crackLen; i++) crackData[i] = (Math.random() * 2 - 1) * (1 - i / crackLen);
+      const crack = ctx.createBufferSource();
+      crack.buffer = crackBuf;
+      const crackGain = ctx.createGain();
+      crackGain.gain.setValueAtTime(0.6, t);
+      crack.connect(crackGain);
+      crackGain.connect(ctx.destination);
+      crack.start(t);
+
+      // 2. Retumbo: tono grave que baja y se apaga
+      const boom = ctx.createOscillator();
+      const boomGain = ctx.createGain();
+      boom.type = 'sine';
+      boom.frequency.setValueAtTime(90, t);
+      boom.frequency.exponentialRampToValueAtTime(35, t + 1.2);
+      boomGain.gain.setValueAtTime(0.7, t);
+      boomGain.gain.exponentialRampToValueAtTime(0.001, t + 1.2);
+      boom.connect(boomGain);
+      boomGain.connect(ctx.destination);
+      boom.start(t);
+      boom.stop(t + 1.25);
+
+      // 3. Cola: ruido grave que se va apagando, como el casco al romperse
+      const tailLen = Math.floor(ctx.sampleRate * 1.5);
+      const tailBuf = ctx.createBuffer(1, tailLen, ctx.sampleRate);
+      const tailData = tailBuf.getChannelData(0);
+      for (let i = 0; i < tailLen; i++) tailData[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / tailLen, 2);
+      const tail = ctx.createBufferSource();
+      tail.buffer = tailBuf;
+      const tailFilter = ctx.createBiquadFilter();
+      tailFilter.type = 'lowpass';
+      tailFilter.frequency.setValueAtTime(600, t);
+      tailFilter.frequency.exponentialRampToValueAtTime(80, t + 1.5);
+      const tailGain = ctx.createGain();
+      tailGain.gain.setValueAtTime(0.35, t);
+      tail.connect(tailFilter);
+      tailFilter.connect(tailGain);
+      tailGain.connect(ctx.destination);
+      tail.start(t);
+    } catch (e) {
+      // Sin audio disponible: el juego sigue funcionando
+    }
+  }
+
+  function fire(target) {
+    if (!hasLaser()) return;
+    playLaserSound();
+    const p = g.p, a = AMMO[p.ammo];
+    const base = Math.atan2(target.y - p.y, target.x - p.x);
+    p.cool = a.cool;
+    for (let i = 0; i < a.shots; i++) {
+      const ang = base + (i - (a.shots - 1) / 2) * a.spread;
+      g.bullets.push({
+        x: p.x + Math.cos(ang) * 18, y: p.y + Math.sin(ang) * 18,
+        vx: Math.cos(ang) * a.speed, vy: Math.sin(ang) * a.speed,
+        life: a.life, dmg: Math.floor((laserDamage(target) + p.damage) * a.mult), color: a.color,
+        target,
+      });
+    }
+  }
+
+  function buyUpgrade(u) {
+    const cost = upgradeCost(g.up[u.lvl]);
+    if (g.credits < cost) { showBanner('Créditos insuficientes'); return; }
+    g.credits -= cost;
+    g.up[u.lvl]++;
+    u.apply(g.p);
+    showBanner(`${u.label} mejorado`);
+  }
+
+  // ---------- Actualización ----------
+  function update(dt) {
+    const p = g.p;
+    // Si se desequipa un láser que daba vida, la vida actual no puede superar el nuevo máximo
+    p.hp = Math.min(p.hp, maxHpNow());
+    while (g.aliens.length < ALIEN_CAP && g.zone.types.length) spawnAlien();
+
+    if (p.dead) {
+      p.respawnT -= dt;
+      if (p.respawnT <= 0) {
+        p.dead = false;
+        p.hp = maxHpNow();
+        p.x = 300; p.y = g.zone.h / 2; p.vx = 0; p.vy = 0;
+      }
+    } else {
+      updatePlayer(dt);
+    }
+
+    updateAliens(dt);
+    updateBullets(dt);
+    updateEnemyShots(dt);
+    updatePickups(dt);
+    updateParticles(dt);
+    updateTexts(dt);
+
+    // Aviso al entrar en una zona segura; se desvanece tras unos segundos
+    const safe = inSafeZone();
+    if (safe && !g.wasSafe) g.safeT = 3;
+    g.wasSafe = safe;
+    g.safeT = Math.max(0, g.safeT - dt);
+
+    if (g.banner > 0) g.banner -= dt;
+    g.hitFlash = Math.max(0, g.hitFlash - dt);
+  }
+
+  function updatePlayer(dt) {
+    const p = g.p, z = g.zone;
+    if (p.target && p.target.hp <= 0) { p.target = null; p.attacking = false; }
+    p.cool -= dt;
+
+    // Con el botón pulsado, el destino sigue al cursor
+    if (mouse.holding) { p.tx = mouse.x - W / 2 + p.x; p.ty = mouse.y - H / 2 + p.y; }
+
+    // Movimiento libre hacia el punto de clic, también mientras se ataca
+    let wx = 0, wy = 0;
+    if (p.tx !== null) {
+      const dx = p.tx - p.x, dy = p.ty - p.y, d = Math.hypot(dx, dy);
+      if (d > 4) { wx = dx / d * p.speed; wy = dy / d * p.speed; }
+      else { p.tx = null; p.ty = null; }
+    }
+    const k = 1 - Math.exp(-6 * dt);
+    p.vx += (wx - p.vx) * k;
+    p.vy += (wy - p.vy) * k;
+    p.x = clamp(p.x + p.vx * dt, 0, z.w);
+    p.y = clamp(p.y + p.vy * dt, 0, z.h);
+
+    if (p.attacking) p.angle = Math.atan2(p.target.y - p.y, p.target.x - p.x);
+    else if (Math.hypot(p.vx, p.vy) > 5) p.angle = Math.atan2(p.vy, p.vx);
+
+    // Disparo automático mientras se ataca
+    if (p.attacking && p.cool <= 0 && dist(p.x, p.y, p.target.x, p.target.y) <= RANGE) {
+      fire(p.target);
+    }
+
+    // Portal a la siguiente zona
+    const portal = portalOf(g.zi);
+    if (portal && dist(p.x, p.y, portal.x, portal.y) < 60) setZone(g.zi + 1);
+  }
+
+  function updateAliens(dt) {
+    const p = g.p, z = g.zone;
+    const atBase = dist(p.x, p.y, z.base.x, z.base.y) < z.base.r;
+    for (const a of g.aliens) {
+      const t = ALIEN[a.type];
+      const dP = dist(a.x, a.y, p.x, p.y);
+      // Los pasivos solo atacan si se les dispara; el resto detecta a la nave en su radio
+      if (!p.dead && !a.aggro && !t.passive && dP < t.aggro) a.aggro = true;
+      // Persiguen hasta que la nave llega a la base (un portal cambia de mapa y limpia todo)
+      if (atBase) { a.aggro = false; a.fleeing = false; }
+
+      const dx = p.x - a.x, dy = p.y - a.y, d = Math.hypot(dx, dy) || 1;
+      const nx = dx / d, ny = dy / d;
+      let wx = 0, wy = 0;
+      if (a.aggro && !p.dead) {
+        let ux, uy;
+        if (a.fleeing) { ux = -nx; uy = -ny; }
+        else if (d > t.range * 0.8) { ux = nx; uy = ny; }
+        else if (d < t.range * 0.5) { ux = -nx; uy = -ny; }
+        else { ux = -ny * 0.4; uy = nx * 0.4; }
+        const sp = a.fleeing ? t.speed * 1.2 : t.speed;
+        wx = ux * sp; wy = uy * sp;
+
+        a.cool -= dt;
+        if (a.cool <= 0 && d <= t.range) {
+          a.cool = t.cool;
+          const base = Math.atan2(dy, dx);
+          for (let i = 0; i < t.shots; i++) {
+            const ang = base + (i - (t.shots - 1) / 2) * 0.22;
+            // Daño entre el 75 % y el 100 % del máximo del NPC; puede fallar
+            const dmg = Math.floor(t.dmg * rnd(0.75, 1));
+            const miss = Math.random() < MISS_CHANCE;
+            g.enemyShots.push({ x: a.x, y: a.y, vx: Math.cos(ang) * 300, vy: Math.sin(ang) * 300, life: 3, dmg, miss });
+          }
+        }
+      } else {
+        a.wt -= dt;
+        if (a.wt <= 0) { a.wa = rnd(0, Math.PI * 2); a.wt = rnd(2, 4); }
+        const hx = a.home.x - a.x, hy = a.home.y - a.y, hd = Math.hypot(hx, hy) || 1;
+        wx = Math.cos(a.wa) * 25; wy = Math.sin(a.wa) * 25;
+        if (hd > 200) { wx += hx / hd * 60; wy += hy / hd * 60; }
+      }
+
+      const k = 1 - Math.exp(-3 * dt);
+      a.vx += (wx - a.vx) * k;
+      a.vy += (wy - a.vy) * k;
+      a.x = clamp(a.x + a.vx * dt, 20, z.w - 20);
+      a.y = clamp(a.y + a.vy * dt, 20, z.h - 20);
+      a.hit = Math.max(0, a.hit - dt);
+    }
+    g.aliens = g.aliens.filter(a => a.hp > 0);
+  }
+
+  function updateBullets(dt) {
+    for (const b of g.bullets) {
+      if (b.homing && b.target && b.target.hp > 0) {
+        const ang = Math.atan2(b.target.y - b.y, b.target.x - b.x);
+        const cur = Math.atan2(b.vy, b.vx);
+        const diff = Math.atan2(Math.sin(ang - cur), Math.cos(ang - cur));
+        const na = cur + clamp(diff, -3 * dt, 3 * dt);
+        const sp = Math.hypot(b.vx, b.vy);
+        b.vx = Math.cos(na) * sp; b.vy = Math.sin(na) * sp;
+      }
+      b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+      if (b.life <= 0) continue;
+      for (const a of g.aliens) {
+        if (a.hp > 0 && dist(a.x, a.y, b.x, b.y) < ALIEN[a.type].r) {
+          hitAlien(a, b.dmg);
+          spark(b.x, b.y, b.color);
+          b.life = 0;
+          break;
+        }
+      }
+    }
+    g.bullets = g.bullets.filter(b => b.life > 0);
+  }
+
+  function updateEnemyShots(dt) {
+    const p = g.p;
+    for (const s of g.enemyShots) {
+      s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt;
+      // Un disparo fallado sigue de largo y no impacta en la nave
+      if (!p.dead && !s.miss && s.life > 0 && dist(s.x, s.y, p.x, p.y) < 14) {
+        hurt(s.dmg);
+        s.life = 0;
+      }
+    }
+    g.enemyShots = g.enemyShots.filter(s => s.life > 0);
+  }
+
+  function updatePickups(dt) {
+    const p = g.p;
+    for (const k of g.pickups) {
+      k.life -= dt;
+      const d = dist(k.x, k.y, p.x, p.y);
+      if (!p.dead && d < 120) { k.x += (p.x - k.x) * 4 * dt; k.y += (p.y - k.y) * 4 * dt; }
+      if (!p.dead && d < 22 && k.life > 0) {
+        if (k.type === 'repair') p.hp = Math.min(maxHpNow(), p.hp + 25);
+        else if (k.type === 'cargo') {
+          g.cargo.prometium += k.cargo.prometium;
+          g.cargo.terbium += k.cargo.terbium;
+          showBanner('Caja de carga recogida');
+        }
+        k.life = 0;
+      }
+    }
+    g.pickups = g.pickups.filter(k => k.life > 0);
+  }
+
+  function updateParticles(dt) {
+    for (const q of g.parts) {
+      q.x += q.vx * dt; q.y += q.vy * dt; q.life -= dt;
+      q.vx *= Math.exp(-3 * dt); q.vy *= Math.exp(-3 * dt);
+    }
+    g.parts = g.parts.filter(q => q.life > 0);
+  }
+
+  // ---------- Dibujo ----------
+  const sx = x => x - g.p.x + W / 2;
+  const sy = y => y - g.p.y + H / 2;
+
+  function polyPts(sides, r) {
+    return Array.from({ length: sides }, (_, i) => {
+      const a = i / sides * Math.PI * 2;
+      return [Math.cos(a) * r, Math.sin(a) * r];
+    });
+  }
+
+  function drawPoly(x, y, rot, pts, fill, stroke) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot);
+    ctx.beginPath();
+    pts.forEach((pt, i) => i ? ctx.lineTo(pt[0], pt[1]) : ctx.moveTo(pt[0], pt[1]));
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function bar(x, y, w, h, ratio, color) {
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, w * clamp(ratio, 0, 1), h);
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.strokeRect(x + 0.5, y + 0.5, w, h);
+  }
+
+  function drawStars() {
+    const camX = g.p.x - W / 2, camY = g.p.y - H / 2;
+    for (const s of g.stars) {
+      const x = mod(s.x * W - camX * s.z * 0.25, W);
+      const y = mod(s.y * H - camY * s.z * 0.25, H);
+      ctx.fillStyle = `rgba(200,220,255,${0.3 + s.z * 0.6})`;
+      ctx.fillRect(x, y, s.z * 1.8, s.z * 1.8);
+    }
+  }
+
+  function drawWorldBackground() {
+    const z = g.zone;
+    ctx.strokeStyle = 'rgba(120,160,255,0.35)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(sx(0), sy(0), z.w, z.h);
+    const bx = sx(z.base.x), by = sy(z.base.y);
+    ctx.beginPath();
+    ctx.arc(bx, by, z.base.r, 0, Math.PI * 2);
+    ctx.setLineDash([8, 8]);
+    ctx.strokeStyle = 'rgba(93,255,138,0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#5dff8a';
+    ctx.font = '12px Consolas, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('BASE', bx, by - z.base.r - 8);
+    ctx.textAlign = 'left';
+    const portal = portalOf(g.zi);
+    if (portal) {
+      const x = sx(portal.x), y = sy(portal.y);
+      ctx.save();
+      ctx.shadowColor = '#ffd166';
+      ctx.shadowBlur = 25;
+      ctx.beginPath();
+      ctx.arc(x, y, 40, 0, Math.PI * 2);
+      ctx.strokeStyle = '#ffd166';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.restore();
+      ctx.fillStyle = '#ffd166';
+      ctx.font = '13px Consolas, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('PORTAL', x, y - 50);
+      ctx.textAlign = 'left';
+    }
+  }
+
+  function drawAliens() {
+    const p = g.p;
+    for (const a of g.aliens) {
+      const t = ALIEN[a.type];
+      const x = sx(a.x), y = sy(a.y);
+      const rot = Math.atan2(p.y - a.y, p.x - a.x);
+      const flash = a.hit > 0;
+      drawPoly(x, y, rot, polyPts(t.sides, t.r), flash ? '#ffffff' : t.color, '#ffffff22');
+      if (a.hp < t.hp || a.aggro) bar(x - 18, y - t.r - 10, 36, 4, a.hp / t.hp, '#ff5c5c');
+      if (a.shield < t.shield) bar(x - 18, y - t.r - 15, 36, 3, a.shield / t.shield, '#5ac8ff');
+      if (g.p.target === a) {
+        ctx.beginPath();
+        ctx.arc(x, y, t.r + 8, 0, Math.PI * 2);
+        ctx.strokeStyle = g.p.attacking ? '#ff4d6d' : '#ffd166';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.fillStyle = '#ffd1dc';
+        ctx.font = '11px Consolas, monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(t.name, x, y + t.r + 22);
+        ctx.textAlign = 'left';
+      }
+    }
+  }
+
+  function drawPickups() {
+    for (const k of g.pickups) {
+      const x = sx(k.x), y = sy(k.y);
+      if (k.type === 'repair') {
+        ctx.fillStyle = '#5dff8a';
+        ctx.fillRect(x - 6, y - 2, 12, 4);
+        ctx.fillRect(x - 2, y - 6, 4, 12);
+      } else if (k.type === 'cargo') {
+        ctx.fillStyle = '#9fe3ff';
+        ctx.fillRect(x - 7, y - 7, 14, 14);
+      }
+    }
+  }
+
+  function drawProjectiles() {
+    for (const b of g.bullets) {
+      const x = sx(b.x), y = sy(b.y);
+      if (b.homing) {
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = b.color;
+        ctx.fill();
+      } else {
+        const len = 14, m = Math.hypot(b.vx, b.vy) || 1;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x - b.vx / m * len, y - b.vy / m * len);
+        ctx.strokeStyle = b.color;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
+    ctx.fillStyle = '#ff7a7a';
+    for (const s of g.enemyShots) {
+      ctx.beginPath();
+      ctx.arc(sx(s.x), sy(s.y), 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawTexts() {
+    ctx.save();
+    ctx.font = 'bold 14px Consolas, monospace';
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+    for (const t of g.texts) {
+      const x = t.onPlayer ? W / 2 + t.x : sx(t.x);
+      const y = t.onPlayer ? H / 2 + t.y : sy(t.y);
+      ctx.globalAlpha = Math.max(0, t.life / t.max);
+      ctx.strokeText(t.text, x, y);
+      ctx.fillStyle = t.color;
+      ctx.fillText(t.text, x, y);
+    }
+    ctx.restore();
+  }
+
+  function drawParticles() {
+    for (const q of g.parts) {
+      ctx.globalAlpha = Math.max(0, q.life / q.max);
+      ctx.fillStyle = q.color;
+      ctx.fillRect(sx(q.x), sy(q.y), q.size, q.size);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawMoveMarker() {
+    const p = g.p;
+    if (p.target || p.tx === null) return;
+    const x = sx(p.tx), y = sy(p.ty);
+    ctx.strokeStyle = 'rgba(93,255,138,0.8)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(x, y, 6, 0, Math.PI * 2);
+    ctx.moveTo(x - 10, y); ctx.lineTo(x + 10, y);
+    ctx.moveTo(x, y - 10); ctx.lineTo(x, y + 10);
+    ctx.stroke();
+  }
+
+  function drawPlayer() {
+    const p = g.p;
+    if (p.dead) return;
+    const cx = W / 2, cy = H / 2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(p.angle);
+    if (Math.hypot(p.vx, p.vy) > 20) {
+      ctx.fillStyle = '#ffb347';
+      ctx.beginPath();
+      ctx.moveTo(-10, -4); ctx.lineTo(-22 - rnd(0, 6), 0); ctx.lineTo(-10, 4);
+      ctx.fill();
+    }
+    ctx.beginPath();
+    ctx.moveTo(14, 0); ctx.lineTo(-10, 8); ctx.lineTo(-6, 0); ctx.lineTo(-10, -8); ctx.closePath();
+    ctx.fillStyle = '#d7e6ff';
+    ctx.fill();
+    ctx.strokeStyle = '#5aa8ff';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawCursor() {
+    ctx.strokeStyle = 'rgba(127,214,255,0.7)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(mouse.x, mouse.y, 8, 0, Math.PI * 2);
+    ctx.moveTo(mouse.x - 12, mouse.y); ctx.lineTo(mouse.x - 4, mouse.y);
+    ctx.moveTo(mouse.x + 4, mouse.y); ctx.lineTo(mouse.x + 12, mouse.y);
+    ctx.stroke();
+  }
+
+  function drawCenter(text, color, size, alpha, y) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+    ctx.font = `${size}px Consolas, monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, W / 2, y);
+    ctx.restore();
+  }
+
+  function drawHUD() {
+    const p = g.p;
+    ctx.font = '13px Consolas, monospace';
+    ctx.textBaseline = 'alphabetic';
+
+    // Izquierda arriba: zona, casco, créditos, munición
+    ctx.fillStyle = '#9fe3ff';
+    ctx.fillText(g.zone.name, 16, 24);
+    bar(16, 34, 220, 12, p.hp / maxHpNow(), '#ff5c5c');
+    bar(16, 52, 220, 8, p.maxShield ? p.shield / p.maxShield : 0, '#5ac8ff');
+    ctx.fillStyle = '#cfe8ff';
+    ctx.fillText(`CASCO ${Math.ceil(p.hp)} / ${maxHpNow()}`, 246, 45);
+    ctx.fillText(`ESCUDO ${Math.ceil(p.shield)} / ${p.maxShield}`, 246, 63);
+    ctx.fillText(`CRÉDITOS ${g.credits}`, 16, 80);
+    ctx.fillText(`MUNICIÓN ${AMMO[p.ammo].name}`, 16, 98);
+    ctx.fillText(`EXP ${g.exp}   HONOR ${g.honor}   URIDIUM ${g.uridium}`, 16, 116);
+    ctx.fillText(`PROMETIUM ${g.cargo.prometium}   TERBIUM ${g.cargo.terbium}`, 16, 134);
+
+    // Derecha arriba: misión y mejoras
+    ctx.textAlign = 'right';
+    const m = MISSIONS[g.mission];
+    ctx.fillStyle = '#ffd166';
+    ctx.fillText('MISIÓN', W - 16, 24);
+    ctx.fillStyle = '#cfe8ff';
+    if (m) {
+      ctx.fillText(m.text, W - 16, 42);
+      ctx.fillText(`${Math.min(g.kills[m.type] || 0, m.count)} / ${m.count}`, W - 16, 60);
+    } else {
+      ctx.fillText('Todas las misiones completadas', W - 16, 42);
+    }
+    ctx.fillStyle = '#7f8ea3';
+    ctx.fillText('MEJORAS  [F1-F3]', W - 16, 84);
+    UPGRADES.forEach((u, i) => {
+      const cost = upgradeCost(g.up[u.lvl]);
+      ctx.fillStyle = g.credits >= cost ? '#cfe8ff' : '#5f6e84';
+      ctx.fillText(`[F${i + 1}] ${u.label} Nv.${g.up[u.lvl]}  ${cost} cr`, W - 16, 102 + i * 18);
+    });
+    ctx.textAlign = 'left';
+
+    // Arriba centro: ayuda
+    ctx.fillStyle = '#5f6e84';
+    ctx.textAlign = 'center';
+    ctx.fillText('Clic en suelo: mover   Clic en NPC: seleccionar   Doble clic o Ctrl: atacar / parar ataque', W / 2, 24);
+    ctx.fillText('1-0: munición   F1-F3: mejoras   P/Esc: pausa', W / 2, 40);
+    ctx.textAlign = 'left';
+  }
+
+  // ---------- Hangar ----------
+  const HANGAR_BTN = { x: 16, y: 146, w: 140, h: 26 };
+
+  function inBase() {
+    const z = g.zone, p = g.p;
+    return dist(p.x, p.y, z.base.x, z.base.y) < z.base.r;
+  }
+
+  function hangarBtnHit(x, y) {
+    const b = HANGAR_BTN;
+    return inBase() && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
+  }
+
+  // Distribución del hangar: se adapta al número de naves, ranuras y láseres
+  // Distribución del hangar: se adapta al número de naves, ranuras y opciones.
+  // La lista de opciones muestra láseres o generadores según la ranura seleccionada.
+  function hangarLayout() {
+    const pw = 620;
+    const shipIds = Object.keys(SHIPS);
+    const laserOpts = [null, ...Object.keys(LASERS)];      // null = ranura vacía
+    const genOpts = [null, ...Object.keys(GENERATORS)];
+    const ship = SHIPS[g.shipId];
+    const shipRows = Math.ceil(shipIds.length / 4);
+    const optRows = Math.ceil(Math.max(laserOpts.length, genOpts.length) / 4);
+    const n = ship.slots, gn = ship.genSlots;
+    const slotW = Math.min(70, (pw - 40 - (n - 1) * 8) / n);
+    const slotLabel = 50 + shipRows * 32 + 12;   // posiciones relativas al panel
+    const slotY = slotLabel + 8;
+    const genLabel = slotY + 70 + 22;
+    const genY = genLabel + 8;
+    const optLabel = genY + 70 + 22;
+    const optY = optLabel + 12;
+    const ph = optY + optRows * 50 + 30;
+    const px = W / 2 - pw / 2, py = H / 2 - ph / 2;
+    const optType = g.hangar.sel.type;
+    const ships = shipIds.map((id, i) => ({ id, x: px + 20 + (i % 4) * 150, y: py + 50 + Math.floor(i / 4) * 32, w: 140, h: 28 }));
+    const slots = Array.from({ length: n }, (_, i) => ({ i, x: px + 20 + i * (slotW + 8), y: py + slotY, w: slotW, h: 70 }));
+    const genSlots = Array.from({ length: gn }, (_, i) => ({ i, x: px + 20 + i * (slotW + 8), y: py + genY, w: slotW, h: 70 }));
+    const options = (optType === 'gen' ? genOpts : laserOpts)
+      .map((id, i) => ({ id, x: px + 20 + (i % 4) * 150, y: py + optY + Math.floor(i / 4) * 50, w: 140, h: 40 }));
+    const close = { x: px + pw - 34, y: py + 10, w: 24, h: 24 };
+    return {
+      px, py, pw, ph, ships, slots, genSlots, options, close, optType,
+      slotLabelY: py + slotLabel, genLabelY: py + genLabel, optLabelY: py + optLabel, instrY: py + ph - 16,
+    };
+  }
+
+  function hangarClick(x, y) {
+    const L = hangarLayout();
+    const hit = r => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+    if (hit(L.close)) { g.hangar.open = false; return; }
+    for (const s of L.ships) if (hit(s)) { g.shipId = s.id; g.hangar.sel = { type: 'laser', i: 0 }; refreshShield(); return; }
+    for (const s of L.slots) if (hit(s)) { g.hangar.sel = { type: 'laser', i: s.i }; return; }
+    for (const s of L.genSlots) if (hit(s)) { g.hangar.sel = { type: 'gen', i: s.i }; return; }
+    for (const o of L.options) if (hit(o)) {
+      if (L.optType === 'gen') genOf()[g.hangar.sel.i] = o.id;
+      else equipOf()[g.hangar.sel.i] = o.id;
+      refreshShield();
+      return;
+    }
+  }
+
+  function hangarButton(x, y, w, h, text, active) {
+    ctx.fillStyle = active ? 'rgba(255,209,102,0.2)' : 'rgba(12,24,48,0.92)';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = active ? '#ffd166' : 'rgba(150,200,255,0.6)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    ctx.fillStyle = '#e6f2ff';
+    ctx.font = '13px Consolas, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x + w / 2, y + h / 2);
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';
+  }
+
+  function drawHangarButton() {
+    const b = HANGAR_BTN;
+    hangarButton(b.x, b.y, b.w, b.h, 'HANGAR [H]', false);
+  }
+
+  function drawHangar() {
+    const L = hangarLayout();
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(8,16,32,0.96)';
+    ctx.fillRect(L.px, L.py, L.pw, L.ph);
+    ctx.strokeStyle = 'rgba(150,200,255,0.75)';
+    ctx.strokeRect(L.px + 0.5, L.py + 0.5, L.pw - 1, L.ph - 1);
+
+    ctx.fillStyle = '#e6f2ff';
+    ctx.font = '16px Consolas, monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('HANGAR', L.px + 20, L.py + 30);
+    hangarButton(L.close.x, L.close.y, L.close.w, L.close.h, 'X', false);
+
+    for (const s of L.ships) {
+      hangarButton(s.x, s.y, s.w, s.h, `${SHIPS[s.id].name} (${SHIPS[s.id].slots})`, s.id === g.shipId);
+    }
+
+    const sel = g.hangar.sel;
+    ctx.fillStyle = '#9fb3c8';
+    ctx.font = '12px Consolas, monospace';
+    ctx.fillText('Ranuras de láser', L.px + 20, L.slotLabelY);
+    for (const s of L.slots) {
+      const id = equipOf()[s.i];
+      hangarButton(s.x, s.y, s.w, s.h, id ? LASERS[id].name : '—', sel.type === 'laser' && s.i === sel.i);
+      ctx.fillStyle = '#5f6e84';
+      ctx.font = '11px Consolas, monospace';
+      ctx.fillText(String(s.i + 1), s.x + 5, s.y + 13);
+    }
+
+    ctx.fillStyle = '#9fb3c8';
+    ctx.font = '12px Consolas, monospace';
+    ctx.fillText('Generadores', L.px + 20, L.genLabelY);
+    for (const s of L.genSlots) {
+      const id = genOf()[s.i];
+      hangarButton(s.x, s.y, s.w, s.h, id ? GENERATORS[id].name : '—', sel.type === 'gen' && s.i === sel.i);
+      ctx.fillStyle = '#5f6e84';
+      ctx.font = '11px Consolas, monospace';
+      ctx.fillText(String(s.i + 1), s.x + 5, s.y + 13);
+    }
+
+    ctx.fillStyle = '#9fb3c8';
+    ctx.font = '12px Consolas, monospace';
+    ctx.fillText(L.optType === 'gen' ? 'Generadores disponibles' : 'Láseres disponibles', L.px + 20, L.optLabelY);
+    for (const o of L.options) {
+      let name = 'Vacío';
+      if (o.id) name = L.optType === 'gen' ? GENERATORS[o.id].name : LASERS[o.id].name;
+      hangarButton(o.x, o.y, o.w, o.h, name, false);
+    }
+
+    ctx.fillStyle = '#5f6e84';
+    ctx.fillText('Selecciona una ranura y luego una opción. H o Esc para cerrar.', L.px + 20, L.instrY);
+  }
+
+  function drawSafeMsg() {
+    if (g.safeT <= 0) return;
+    ctx.save();
+    // Aparece en 0,6 s y se oculta poco a poco en el último segundo (dura 3 s)
+    ctx.globalAlpha = Math.min(1, g.safeT, (3 - g.safeT) / 0.6);
+    ctx.fillStyle = '#5dff8a';
+    ctx.font = '18px Consolas, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Zona de no ataques', W / 2, 72);
+    ctx.restore();
+  }
+
+  function drawActionBar() {
+    const x0 = barX0(), y0 = barY0();
+    for (let i = 0; i < 10; i++) {
+      const x = x0 + i * (SLOT + GAP);
+      const item = BAR[i];
+      const id = item && item.ammo;
+      const a = id ? AMMO[id] : null;
+      const selected = a && g.p.ammo === id;
+      ctx.fillStyle = 'rgba(12,24,48,0.92)';
+      ctx.fillRect(x, y0, SLOT, SLOT);
+      ctx.strokeStyle = selected ? '#ffd166' : 'rgba(150,200,255,0.75)';
+      ctx.lineWidth = selected ? 2 : 1;
+      ctx.strokeRect(x + 0.5, y0 + 0.5, SLOT - 1, SLOT - 1);
+      ctx.fillStyle = '#9fb3c8';
+      ctx.font = '11px Consolas, monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(i === 9 ? '0' : String(i + 1), x + 5, y0 + 13);
+      if (a) {
+        ctx.fillStyle = a.color;
+        ctx.fillRect(x + SLOT / 2 - 12, y0 + 20, 24, 4);
+        ctx.fillStyle = '#e6f2ff';
+        ctx.font = '11px Consolas, monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(a.name, x + SLOT / 2, y0 + 42);
+        ctx.fillStyle = '#ffd166';
+        ctx.fillText('x' + a.mult, x + SLOT / 2, y0 + 55);
+      }
+    }
+    ctx.textAlign = 'left';
+  }
+
+  // Geometría del minimapa (esquina inferior derecha), compartida por el dibujo y los clics
+  function minimapGeom() {
+    const mw = 200, mh = 130, mx = W - mw - 16, my = H - mh - 16, z = g.zone;
+    const s = Math.min(mw / z.w, mh / z.h);
+    const ox = mx + (mw - z.w * s) / 2, oy = my + (mh - z.h * s) / 2;
+    return { mw, mh, mx, my, s, ox, oy };
+  }
+
+  function drawMinimap() {
+    const { mw, mh, mx, my, s, ox, oy } = minimapGeom();
+    const z = g.zone;
+    ctx.fillStyle = 'rgba(5,10,25,0.8)';
+    ctx.fillRect(mx, my, mw, mh);
+    ctx.strokeStyle = 'rgba(120,160,255,0.5)';
+    ctx.strokeRect(mx + 0.5, my + 0.5, mw - 1, mh - 1);
+    ctx.strokeRect(ox, oy, z.w * s, z.h * s);
+    for (const a of g.aliens) {
+      ctx.fillStyle = ALIEN[a.type].color;
+      ctx.fillRect(ox + a.x * s - 1.5, oy + a.y * s - 1.5, 3, 3);
+    }
+    const portal = portalOf(g.zi);
+    if (portal) {
+      ctx.fillStyle = '#ffd166';
+      ctx.fillRect(ox + portal.x * s - 2, oy + portal.y * s - 2, 4, 4);
+    }
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(ox + g.p.x * s - 2, oy + g.p.y * s - 2, 4, 4);
+
+    // Coordenadas de la nave en unidades, con el origen arriba a la izquierda
+    ctx.fillStyle = '#cfe8ff';
+    ctx.font = '12px Consolas, monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(`X ${(g.p.x / UNIT_PX).toFixed(1)}   Y ${(g.p.y / UNIT_PX).toFixed(1)}`, mx, my - 8);
+  }
+
+  function drawBackground() {
+    const z = g.zone;
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, z.bgTop);
+    grad.addColorStop(1, z.bgBottom);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+    if (z.planet) drawPlanet(z.planet);
+  }
+
+  function drawPlanet(pl) {
+    // Parallax: el planeta se mueve más despacio que la nave
+    const par = 0.25;
+    const cx = W / 2 + (pl.x - g.p.x) * par;
+    const cy = H / 2 + (pl.y - g.p.y) * par;
+    ctx.save();
+    ctx.globalAlpha = pl.alpha;
+
+    // Atmósfera
+    const halo = ctx.createRadialGradient(cx, cy, pl.r * 0.95, cx, cy, pl.r * 1.25);
+    halo.addColorStop(0, 'rgba(160,255,150,0.45)');
+    halo.addColorStop(1, 'rgba(160,255,150,0)');
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(cx, cy, pl.r * 1.25, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Disco del planeta
+    const body = ctx.createRadialGradient(cx - pl.r * 0.35, cy - pl.r * 0.35, pl.r * 0.1, cx, cy, pl.r);
+    body.addColorStop(0, '#f2ffc8');
+    body.addColorStop(0.5, '#b8d86a');
+    body.addColorStop(1, '#4d7a32');
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.arc(cx, cy, pl.r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Bandas de nubes, recortadas al disco
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, pl.r, 0, Math.PI * 2);
+    ctx.clip();
+    for (let i = -3; i <= 3; i++) {
+      ctx.fillStyle = i % 2 ? 'rgba(230,255,180,0.14)' : 'rgba(40,90,40,0.12)';
+      ctx.fillRect(cx - pl.r, cy + i * pl.r * 0.22, pl.r * 2, pl.r * 0.14);
+    }
+    ctx.restore();
+
+    ctx.restore();
+  }
+
+  function draw() {
+    drawBackground();
+    drawStars();
+    drawWorldBackground();
+    drawPickups();
+    drawAliens();
+    drawProjectiles();
+    drawParticles();
+    drawTexts();
+    drawMoveMarker();
+    drawPlayer();
+
+    if (g.p.dead) drawCenter(`Reapareciendo en ${Math.ceil(g.p.respawnT)}...`, '#ff6b6b', 22, 1, H * 0.3);
+    if (g.hitFlash > 0) {
+      ctx.fillStyle = `rgba(255,40,40,${g.hitFlash * 2})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    drawHUD();
+    drawActionBar();
+    drawSafeMsg();
+    drawMinimap();
+    if (g.banner > 0) drawCenter(g.bannerText, '#9fe3ff', 26, 1, H * 0.25);
+    if (g.paused) {
+      drawCenter('PAUSA', '#ffffff', 36, 1, H / 2);
+      drawCenter('P / Esc para continuar', '#9fb3c8', 16, 0.9, H / 2 + 40);
+    }
+    if (g.hangar.open) drawHangar();
+    else if (inBase()) drawHangarButton();
+    drawCursor();
+  }
+
+  // ---------- Entrada ----------
+  const mouse = { x: 0, y: 0, holding: false, downAt: 0 };
+  canvas.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
+  canvas.addEventListener('mousedown', e => {
+    if (g.hangar.open) { hangarClick(e.clientX, e.clientY); return; }
+    if (hangarBtnHit(e.clientX, e.clientY)) { g.hangar.open = true; return; }
+    if (g.paused || g.p.dead) return;
+    const slot = barSlotAt(e.clientX, e.clientY);
+    if (slot >= 0) { useSlot(slot); return; }
+
+    // Clic en el minimapa: la nave viaja al punto marcado. Cualquier otro clic lo cancela.
+    const mm = minimapGeom();
+    if (e.clientX >= mm.mx && e.clientX <= mm.mx + mm.mw && e.clientY >= mm.my && e.clientY <= mm.my + mm.mh) {
+      g.p.tx = clamp((e.clientX - mm.ox) / mm.s, 0, g.zone.w);
+      g.p.ty = clamp((e.clientY - mm.oy) / mm.s, 0, g.zone.h);
+      return;
+    }
+    const wx = e.clientX - W / 2 + g.p.x;
+    const wy = e.clientY - H / 2 + g.p.y;
+    const a = e.button === 0 ? nearestAlien(wx, wy, 40) : null;
+    if (a) {
+      if (e.detail >= 2) startAttack(a);        // doble clic: inicia el ataque
+      else if (a !== g.p.target) { g.p.target = a; g.p.attacking = false; }  // clic simple: cambia el objetivo fijado
+      return;
+    }
+    g.p.tx = wx;
+    g.p.ty = wy;
+    mouse.holding = true;
+    mouse.downAt = performance.now();
+  });
+
+  addEventListener('mouseup', () => {
+    if (!mouse.holding) return;
+    mouse.holding = false;
+    // Un clic corto es un destino; si se mantuvo pulsado, la nave se detiene al soltar
+    if (performance.now() - mouse.downAt > 200) g.p.tx = null;
+  });
+
+  function startAttack(a) {
+    if (!hasLaser()) { showBanner('Sin láseres equipados'); return; }
+    const p = g.p;
+    p.target = a;
+    p.attacking = true;
+  }
+
+  function useSlot(i) {
+    const item = BAR[i];
+    if (!item) return;
+    if (item.ammo) g.p.ammo = item.ammo;
+    if (item.attack && g.p.target && g.p.target.hp > 0 && !g.p.dead) startAttack(g.p.target);
+  }
+
+  function barX0() { return W / 2 - (10 * SLOT + 9 * GAP) / 2; }
+  function barY0() { return H - SLOT - 24; }
+
+  function barSlotAt(x, y) {
+    const i = Math.floor((x - barX0()) / (SLOT + GAP));
+    if (i < 0 || i > 9) return -1;
+    const rel = x - barX0() - i * (SLOT + GAP);
+    return rel <= SLOT && y >= barY0() && y <= barY0() + SLOT ? i : -1;
+  }
+
+  function toggleAttack() {
+    if (g.p.attacking) g.p.attacking = false;
+    else if (g.p.target && g.p.target.hp > 0 && !g.p.dead) startAttack(g.p.target);
+  }
+
+  addEventListener('keydown', e => {
+    if (g.hangar.open) {
+      if (e.code === 'Escape' || e.code === 'KeyH') g.hangar.open = false;
+      return;
+    }
+    if (e.code === 'KeyH' && !g.p.dead && inBase()) { g.hangar.open = true; return; }
+    if (e.code === 'ControlLeft' || e.code === 'ControlRight') {
+      e.preventDefault();
+      if (!e.repeat && !g.paused) toggleAttack();
+      return;
+    }
+    if (e.code === 'KeyP' || e.code === 'Escape') { g.paused = !g.paused; return; }
+    if (g.paused) return;
+    const slot = BAR_KEYS.indexOf(e.code);
+    if (slot >= 0) useSlot(slot);
+    const u = UPGRADES.find(x => x.key === e.code);
+    if (u) buyUpgrade(u);
+  });
+
+  // ---------- Bucle principal ----------
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    if (!g.paused && !g.hangar.open) update(dt);
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  reset();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
