@@ -41,9 +41,19 @@
       id: '3-1', name: '3-1 · VRU', faction: 'VRU', w: MAP_W, h: MAP_H,
       types: ['streuner', 'recruit', 'aider'],
       bgTop: '#0c2a1a', bgBottom: '#02080a',
+      base: { x: 39000, y: 24000, r: 250 },
+      station: { x: 39120, y: 23910 },
+      planet: { x: 32500, y: 7500, r: 700, alpha: 1 },
+      gates: { next: { x: 3000, y: 3000 } },
+    },
+    {
+      id: '3-2', name: '3-2 · VRU', faction: 'VRU', w: MAP_W, h: MAP_H,
+      types: ['lordakia', 'mordon', 'saimon'],
+      bgTop: '#2a2a0c', bgBottom: '#0a0802',
       base: { x: 2500, y: MAP_H / 2, r: 250 },
       station: { x: 2620, y: MAP_H / 2 - 90 },
-      planet: { x: 32500, y: 7500, r: 700, alpha: 1 },
+      planet: { x: 32500, y: 20000, r: 700, alpha: 1 },
+      gates: { prev: { x: 3000, y: 3000 } },
     },
   ];
 
@@ -190,12 +200,14 @@
     setZone(0);
   }
 
-  function setZone(i) {
+  // Cambia de mapa. Sin "spawn" la nave aparece en la base; si se cruza una puerta, junto a su enlace
+  function setZone(i, spawn) {
     g.zi = i;
     g.zone = ZONES[i];
     g.aliens = []; g.bullets = []; g.enemyShots = []; g.pickups = []; g.parts = [];
     const p = g.p;
-    p.x = g.zone.base.x; p.y = g.zone.base.y;
+    const at = spawn || g.zone.base;
+    p.x = at.x; p.y = at.y;
     p.tx = null; p.ty = null; p.target = null; p.attacking = false;
     showBanner(g.zone.name);
   }
@@ -204,8 +216,7 @@
   function inSafeZone() {
     const p = g.p, z = g.zone;
     if (dist(p.x, p.y, z.base.x, z.base.y) < z.base.r) return true;
-    const portal = portalOf(g.zi);
-    return !!portal && dist(p.x, p.y, portal.x, portal.y) < 200;
+    return !!portalInRange();
   }
 
   function showBanner(text) {
@@ -213,9 +224,60 @@
     g.bannerText = text;
   }
 
-  function portalOf(zi) {
-    if (zi >= ZONES.length - 1) return null;
-    return { x: ZONES[zi].w - 200, y: ZONES[zi].h / 2 };
+  // Puertas de la zona actual (gates.next lleva a la zona siguiente, gates.prev a la anterior).
+  // La nave aparece a 120 px de la puerta de enlace del destino, dentro de su zona segura.
+  function portalsOf(zi) {
+    const z = ZONES[zi], list = [];
+    if (z.gates.next) {
+      const to = ZONES[zi + 1];
+      list.push({ ...z.gates.next, to: zi + 1, spawn: { x: to.gates.prev.x + 120, y: to.gates.prev.y } });
+    }
+    if (z.gates.prev) {
+      const to = ZONES[zi - 1];
+      list.push({ ...z.gates.prev, to: zi - 1, spawn: { x: to.gates.next.x + 120, y: to.gates.next.y } });
+    }
+    return list;
+  }
+
+  // Teletransporte: solo disponible a esta distancia de la puerta (la misma que la zona segura).
+  // Se activa con el icono sobre la puerta o con la tecla J; no ocurre al pasar por encima.
+  const PORTAL_RANGE = 200;
+
+  function portalInRange() {
+    const p = g.p;
+    return portalsOf(g.zi).find(pt => dist(p.x, p.y, pt.x, pt.y) < PORTAL_RANGE) || null;
+  }
+
+  function teleport(pt) {
+    if (pt) setZone(pt.to, pt.spawn);
+  }
+
+  // Icono de teletransporte sobre la puerta, en coordenadas de pantalla
+  function portalIconBox(pt) {
+    return { x: sx(pt.x) - 15, y: sy(pt.y) - 95, w: 30, h: 30 };
+  }
+
+  function drawPortalIcon(b) {
+    const hover = inBox(b, mouse.x, mouse.y);
+    const bg = ctx.createLinearGradient(0, b.y, 0, b.y + b.h);
+    bg.addColorStop(0, '#1b2a44');
+    bg.addColorStop(1, '#070d18');
+    ctx.fillStyle = bg;
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeStyle = hover ? '#fff0b3' : '#ffd166';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(b.x + 1, b.y + 1, b.w - 2, b.h - 2);
+    // Rayo: el mismo símbolo que los bonos de teletransporte
+    const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+    ctx.fillStyle = '#ffd166';
+    ctx.beginPath();
+    [[0.3, -1], [-0.6, 0.15], [0, 0.15], [-0.3, 1], [0.6, -0.2], [0, -0.2]].forEach(([x, y], i) => {
+      if (i === 0) ctx.moveTo(cx + x * 9, cy + y * 9);
+      else ctx.lineTo(cx + x * 9, cy + y * 9);
+    });
+    ctx.closePath();
+    ctx.fill();
+    if (hover) drawIconTooltip(b, 'Teletransporte (J)');
   }
 
   // ---------- Entidades ----------
@@ -677,8 +739,6 @@
     }
 
     // Portal a la siguiente zona
-    const portal = portalOf(g.zi);
-    if (portal && dist(p.x, p.y, portal.x, portal.y) < 60) setZone(g.zi + 1);
   }
 
   function updateAliens(dt) {
@@ -878,8 +938,7 @@
     ctx.textAlign = 'center';
     ctx.fillText('BASE', bx, by - z.base.r - 8);
     ctx.textAlign = 'left';
-    const portal = portalOf(g.zi);
-    if (portal) {
+    for (const portal of portalsOf(g.zi)) {
       const x = sx(portal.x), y = sy(portal.y);
       ctx.save();
       ctx.shadowColor = '#ffd166';
@@ -895,6 +954,8 @@
       ctx.textAlign = 'center';
       ctx.fillText('PORTAL', x, y - 50);
       ctx.textAlign = 'left';
+      // El icono de teletransporte solo aparece al alcance de la puerta
+      if (dist(g.p.x, g.p.y, portal.x, portal.y) < PORTAL_RANGE) drawPortalIcon(portalIconBox(portal));
     }
   }
 
@@ -1913,8 +1974,7 @@
       ctx.arc(ox + a.x * s, oy + a.y * s, 1.5, 0, Math.PI * 2);
       ctx.fill();
     }
-    const portal = portalOf(g.zi);
-    if (portal) {
+    for (const portal of portalsOf(g.zi)) {
       ctx.fillStyle = '#ffd166';
       ctx.fillRect(ox + portal.x * s - 2, oy + portal.y * s - 2, 4, 4);
     }
@@ -2105,6 +2165,9 @@
       if (inBox(sb, e.clientX, e.clientY)) return;
     }
     if (g.paused || g.p.dead) return;
+    // Icono de teletransporte sobre la puerta: solo funciona al alcance
+    const near = portalInRange();
+    if (near && inBox(portalIconBox(near), e.clientX, e.clientY)) { teleport(near); return; }
     const slot = barSlotAt(e.clientX, e.clientY);
     if (slot >= 0) { useSlot(slot); return; }
 
@@ -2195,6 +2258,7 @@
     }
     if (e.code === 'KeyP' || e.code === 'Escape') { g.paused = !g.paused; return; }
     if (g.paused) return;
+    if (e.code === 'KeyJ') teleport(portalInRange());
     const slot = BAR_KEYS.indexOf(e.code);
     if (slot >= 0) useSlot(slot);
     if (e.code === 'Space') { e.preventDefault(); fireMissile(); }
