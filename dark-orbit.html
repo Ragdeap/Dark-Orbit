@@ -123,11 +123,16 @@
   const upgradeCost = lvl => 100 + 60 * lvl;
 
   // Misiones en orden: cada una pide matar cierta cantidad de un tipo de NPC.
+  // rewards: solo las que da la misión; las que no existen no se muestran
+  // title: nombre destacado; description: historia de la misión (textos provisionales)
   const MISSIONS = [
-    { text: 'Elimina 8 Streuner',         type: 'streuner', count: 8, reward: 200 },
-    { text: 'Elimina 6 Recruit Streuner', type: 'recruit',  count: 6, reward: 350 },
-    { text: 'Elimina 6 Aider Streuner',   type: 'aider',    count: 6, reward: 350 },
+    { title: 'Cazador de Streuner', description: 'Los Streuner de esta zona llevan días atacando a los convoyes que cruzan el sector. Elimina a ocho de ellos para asegurar la ruta hacia la base.', text: 'Elimina 8 Streuner', type: 'streuner', count: 8, rewards: { credits: 200 } },
+    // Misión de prueba de navegación: llegar a una coordenada (en unidades del minimapa 200 / 133)
+    { title: 'Reconocimiento', description: 'Un satélite ha detectado una señal sin identificar en la posición 200 / 133. Acude allí y confirma qué está pasando.', text: 'Viaja a la posición 200 / 133', type: 'travel', count: 1, to: { x: 2400, y: 1600 }, radius: 150, rewards: { credits: 300 } },
+    { title: 'Caza de reclutas', description: 'Los Recruit Streuner han empezado a reagruparse cerca de la frontera. Reduce su número antes de que vuelvan a atacar.', text: 'Elimina 6 Recruit Streuner', type: 'recruit', count: 6, rewards: { credits: 350 } },
+    { title: 'Caza de ayudantes', description: 'Los Aider Streuner protegen a los reclutas en esta zona. Elimina a seis de ellos para despejar el camino.', text: 'Elimina 6 Aider Streuner', type: 'aider', count: 6, rewards: { credits: 350 } },
   ];
+  const REWARD_LABELS = [['honor', 'Honor'], ['credits', 'Créditos'], ['uridium', 'Uridium'], ['exp', 'Experiencia']];
 
   // ---------- Estado ----------
   let g;
@@ -146,8 +151,9 @@
       aliens: [], bullets: [], enemyShots: [], pickups: [], parts: [], texts: [],
       stars: Array.from({ length: 260 }, () => ({ x: Math.random(), y: Math.random(), z: rnd(0.2, 1) })),
       credits: 0, uridium: 0, exp: 0, honor: 0, cargo: { prometium: 0, terbium: 0 },
-      mission: 0, kills: {},
+      missions: [{ id: 0, progress: 0 }, { id: 1, progress: 0 }], nextMission: 2, missionSel: 0,
       banner: 0, bannerText: '', rewardT: 0, rewardLines: [], hitFlash: 0, paused: false,
+      missionOpen: false, missionTab: 'summary',
       safeT: 0, wasSafe: false,
       shipId: 'PHOENIX',
       equip: { PHOENIX: ['LF1'] },
@@ -255,20 +261,48 @@
     ].filter(([n]) => n > 0).map(([n, what]) => `Has recibido ${n} ${what}`);
     g.rewardT = 3;
     if (r.cargo) g.pickups.push({ x: a.x, y: a.y, type: 'cargo', cargo: r.cargo, life: 60 });
-    g.kills[a.type] = (g.kills[a.type] || 0) + 1;
     if (Math.random() < 0.10) g.pickups.push({ x: a.x, y: a.y, type: 'repair', life: 20 });
     if (g.p.target === a) { g.p.target = null; g.p.attacking = false; }
-    checkMission();
+    checkMission(a.type);
   }
 
-  function checkMission() {
-    const m = MISSIONS[g.mission];
-    if (!m) return;
-    if ((g.kills[m.type] || 0) >= m.count) {
-      g.credits += m.reward;
-      g.mission++;
-      showBanner(`Misión completada: +${m.reward} créditos`);
+  // Cada baja cuenta para las misiones activas de ese tipo
+  function checkMission(type) {
+    for (const e of g.missions) {
+      const m = MISSIONS[e.id];
+      if (m.type === type && e.progress < m.count) e.progress++;
     }
+    completeMissions();
+  }
+
+  // Las misiones de viaje avanzan al llegar al punto marcado
+  function checkTravel() {
+    for (const e of g.missions) {
+      const m = MISSIONS[e.id];
+      if (m.type === 'travel' && e.progress < m.count && dist(g.p.x, g.p.y, m.to.x, m.to.y) < m.radius) e.progress++;
+    }
+    completeMissions();
+  }
+
+  // Las misiones completadas entregan su recompensa y salen de la lista
+  function completeMissions() {
+    const done = g.missions.filter(e => e.progress >= MISSIONS[e.id].count);
+    if (!done.length) return;
+    for (const e of done) {
+      const m = MISSIONS[e.id];
+      for (const [k] of REWARD_LABELS) if (m.rewards[k]) g[k] += m.rewards[k];
+    }
+    g.missions = g.missions.filter(e => e.progress < MISSIONS[e.id].count);
+    g.missionSel = Math.min(g.missionSel, Math.max(0, g.missions.length - 1));
+    showBanner('Misión completada');
+  }
+
+  // Acepta la siguiente misión de la lista si queda hueco (máximo MAX_MISSIONS a la vez)
+  function acceptMission() {
+    if (!canAcceptMission()) return;
+    g.missions.push({ id: g.nextMission, progress: 0 });
+    g.nextMission++;
+    g.missionSel = g.missions.length - 1;
   }
 
   function hitAlien(a, dmg) {
@@ -882,6 +916,166 @@
     ctx.restore();
   }
 
+  // Ventana de misiones y mejoras: minimizada es un cuadrado arriba a la derecha; abierta, un panel de fondo sólido
+  const MAX_MISSIONS = 5;   // misiones aceptadas a la vez
+  function canAcceptMission() {
+    return g.missions.length < MAX_MISSIONS && g.nextMission < MISSIONS.length;
+  }
+
+  function missionPanelGeom() {
+    if (!g.missionOpen) return { x: W - 52, y: 16, w: 36, h: 36 };
+    const w = 300, h = 190, x = W - w - 16, y = 16;
+    // Bolas de misiones junto a la X, alineadas a la derecha; una por misión aceptada
+    const n = g.missions.length;
+    return {
+      x, y, w, h,
+      close: { x: x + w - 26, y: y + 6, w: 20, h: 20 },
+      slots: g.missions.map((_, i) => ({ x: x + w - 48 - (n - 1 - i) * 16, y: y + 8, w: 16, h: 16 })),
+      tabs: {
+        description: { x: x + 8, y: y + 40, w: 96, h: 22 },
+        summary: { x: x + 110, y: y + 40, w: 70, h: 22 },
+        rewards: { x: x + 186, y: y + 40, w: 90, h: 22 },
+      },
+    };
+  }
+
+  // Divide un texto en líneas que no superen maxW (con la fuente actual del contexto)
+  function wrapText(text, maxW) {
+    const lines = [];
+    let line = '';
+    for (const word of text.split(' ')) {
+      const test = line ? `${line} ${word}` : word;
+      if (ctx.measureText(test).width > maxW && line) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = test;
+      }
+    }
+    if (line) lines.push(line);
+    return lines;
+  }
+
+  // Icono minimizado: una exclamación dorada sobre un cuadro oscuro, con brillo y etiqueta al pasar el ratón
+  function drawMissionIcon(b) {
+    const hover = mouse.x >= b.x && mouse.x <= b.x + b.w && mouse.y >= b.y && mouse.y <= b.y + b.h;
+    const bg = ctx.createLinearGradient(0, b.y, 0, b.y + b.h);
+    bg.addColorStop(0, '#1b2a44');
+    bg.addColorStop(1, '#070d18');
+    ctx.fillStyle = bg;
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeStyle = hover ? '#fff0b3' : '#ffd166';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(b.x + 1, b.y + 1, b.w - 2, b.h - 2);
+    ctx.fillStyle = '#ffd166';
+    ctx.shadowColor = '#ffd166';
+    ctx.shadowBlur = hover ? 16 : 6;
+    ctx.font = 'bold 24px Consolas, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('!', b.x + b.w / 2, b.y + b.h / 2 + 1);
+    ctx.shadowBlur = 0;
+    if (hover) {
+      ctx.font = '13px Consolas, monospace';
+      const label = 'Misiones';
+      const tw = ctx.measureText(label).width;
+      const tx = b.x - tw - 22, ty = b.y + b.h / 2;
+      ctx.fillStyle = '#0b1424';
+      ctx.fillRect(tx - 8, ty - 11, tw + 16, 22);
+      ctx.strokeStyle = '#ffd166';
+      ctx.strokeRect(tx - 7.5, ty - 10.5, tw + 15, 21);
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'left';
+      ctx.fillText(label, tx, ty + 1);
+    }
+  }
+
+  function drawMissionPanel() {
+    const b = missionPanelGeom();
+    ctx.save();
+    if (!g.missionOpen) { drawMissionIcon(b); ctx.restore(); return; }
+    ctx.fillStyle = '#0b1424';
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeStyle = '#ffd166';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
+    ctx.font = '13px Consolas, monospace';
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';
+    // Icono de misiones (solo la exclamación) junto al nombre de la ventana
+    ctx.fillStyle = '#ffd166';
+    ctx.font = 'bold 14px Consolas, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('!', b.x + 18, b.y + 22);
+    ctx.font = '13px Consolas, monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('MISIONES', b.x + 30, b.y + 22);
+    ctx.fillStyle = '#5f6e84';
+    ctx.fillRect(b.x + 8, b.y + 30, b.w - 16, 1);
+    // Botón de cerrar (vuelve a minimizarse)
+    const c = b.close;
+    ctx.strokeStyle = '#cfe8ff';
+    ctx.beginPath();
+    ctx.moveTo(c.x + 5, c.y + 5); ctx.lineTo(c.x + c.w - 5, c.y + c.h - 5);
+    ctx.moveTo(c.x + c.w - 5, c.y + 5); ctx.lineTo(c.x + 5, c.y + c.h - 5);
+    ctx.stroke();
+
+    // Una bola por misión aceptada: blanca la seleccionada, gris el resto
+    b.slots.forEach((s, i) => {
+      ctx.beginPath();
+      ctx.arc(s.x + s.w / 2, s.y + s.h / 2, 4, 0, Math.PI * 2);
+      ctx.fillStyle = i === g.missionSel ? '#ffffff' : '#5f6e84';
+      ctx.fill();
+    });
+
+    // Pestañas: Resumen (objetivo) y Recompensa
+    const tabs = [['description', 'Descripción'], ['summary', 'Resumen'], ['rewards', 'Recompensa']];
+    for (const [id, label] of tabs) {
+      const r = b.tabs[id];
+      const active = g.missionTab === id;
+      ctx.fillStyle = active ? '#ffd166' : '#5f6e84';
+      ctx.fillText(label, r.x + 4, r.y + 15);
+      if (active) ctx.fillRect(r.x, r.y + r.h, r.w, 2);
+    }
+
+    // Misión del slot seleccionado
+    const entry = g.missions[g.missionSel];
+    const m = entry ? MISSIONS[entry.id] : null;
+    const allDone = !g.missions.length && g.nextMission >= MISSIONS.length;
+    // Título de la misión, destacado sobre el resto de la información
+    if (m) {
+      ctx.font = 'bold 14px Consolas, monospace';
+      ctx.fillStyle = '#ffd166';
+      ctx.fillText(m.title, b.x + 12, b.y + 84);
+      ctx.font = '13px Consolas, monospace';
+    }
+    ctx.fillStyle = '#cfe8ff';
+    if (g.missionTab === 'description') {
+      // Historia de la misión, con el mismo margen que los requisitos y ajustada al ancho disponible
+      if (m) {
+        wrapText(m.description, b.w - 40).forEach((line, i) => ctx.fillText(line, b.x + 28, b.y + 104 + i * 18));
+      } else {
+        ctx.fillText('No hay misiones activas', b.x + 12, b.y + 84);
+      }
+    } else if (g.missionTab === 'summary') {
+      if (m) {
+        // Requisitos de la misión, con margen izquierdo para diferenciarlos del título
+        ctx.fillText(m.text, b.x + 28, b.y + 104);
+        ctx.fillText(`${entry.progress} / ${m.count}`, b.x + 28, b.y + 122);
+      } else {
+        ctx.fillText(allDone ? 'Todas las misiones completadas' : 'No hay misiones activas', b.x + 12, b.y + 84);
+      }
+    } else if (m) {
+      // Solo se listan las recompensas que da la misión
+      REWARD_LABELS.filter(([k]) => m.rewards[k]).forEach(([k, label], i) => {
+        ctx.fillText(`${label}: ${m.rewards[k]}`, b.x + 28, b.y + 104 + i * 18);
+      });
+    } else {
+      ctx.fillText('No hay misiones activas', b.x + 12, b.y + 84);
+    }
+    ctx.restore();
+  }
+
   function drawHUD() {
     const p = g.p;
     ctx.font = '13px Consolas, monospace';
@@ -904,25 +1098,6 @@
       ctx.fillText('Progreso no guardado: el navegador bloquea localStorage', 16, 152);
     }
 
-    // Derecha arriba: misión y mejoras
-    ctx.textAlign = 'right';
-    const m = MISSIONS[g.mission];
-    ctx.fillStyle = '#ffd166';
-    ctx.fillText('MISIÓN', W - 16, 24);
-    ctx.fillStyle = '#cfe8ff';
-    if (m) {
-      ctx.fillText(m.text, W - 16, 42);
-      ctx.fillText(`${Math.min(g.kills[m.type] || 0, m.count)} / ${m.count}`, W - 16, 60);
-    } else {
-      ctx.fillText('Todas las misiones completadas', W - 16, 42);
-    }
-    ctx.fillStyle = '#7f8ea3';
-    ctx.fillText('MEJORAS  [F1-F3]', W - 16, 84);
-    UPGRADES.forEach((u, i) => {
-      const cost = upgradeCost(g.up[u.lvl]);
-      ctx.fillStyle = g.credits >= cost ? '#cfe8ff' : '#5f6e84';
-      ctx.fillText(`[F${i + 1}] ${u.label} Nv.${g.up[u.lvl]}  ${cost} cr`, W - 16, 102 + i * 18);
-    });
     ctx.textAlign = 'left';
 
   }
@@ -1258,6 +1433,7 @@
     }
 
     drawHUD();
+    drawMissionPanel();
     drawActionBar();
     drawSafeMsg();
     drawMinimap();
@@ -1285,6 +1461,22 @@
   canvas.addEventListener('mousedown', e => {
     if (g.hangar.open) { hangarClick(e.clientX, e.clientY); return; }
     if (hangarBtnHit(e.clientX, e.clientY)) { g.hangar.open = true; return; }
+    // Ventana de misiones: el cuadrado la abre; el botón X la minimiza. Un clic dentro no mueve la nave
+    const mp = missionPanelGeom();
+    if (e.clientX >= mp.x && e.clientX <= mp.x + mp.w && e.clientY >= mp.y && e.clientY <= mp.y + mp.h) {
+      const inRect = r => e.clientX >= r.x && e.clientX <= r.x + r.w && e.clientY >= r.y && e.clientY <= r.y + r.h;
+      if (!g.missionOpen) { g.missionOpen = true; g.missionTab = 'summary'; }
+      else if (inRect(mp.close)) g.missionOpen = false;
+      else if (inRect(mp.tabs.description)) g.missionTab = 'description';
+      else if (inRect(mp.tabs.summary)) g.missionTab = 'summary';
+      else if (inRect(mp.tabs.rewards)) g.missionTab = 'rewards';
+      else {
+        // Slot de misión: selecciona esa misión y vuelve a la pestaña Resumen
+        const s = mp.slots.findIndex(inRect);
+        if (s >= 0 && s < g.missions.length) { g.missionSel = s; g.missionTab = 'summary'; }
+      }
+      return;
+    }
     if (g.paused || g.p.dead) return;
     const slot = barSlotAt(e.clientX, e.clientY);
     if (slot >= 0) { useSlot(slot); return; }
@@ -1382,7 +1574,7 @@
       zi: g.zi, x: p.x, y: p.y, hp: p.hp, maxHp: p.maxHp, shield: p.shield,
       damage: p.damage, speed: p.speed, ammo: p.ammo,
       up: g.up, credits: g.credits, uridium: g.uridium, exp: g.exp, honor: g.honor,
-      cargo: g.cargo, mission: g.mission, kills: g.kills,
+      cargo: g.cargo, missions: g.missions, nextMission: g.nextMission,
       shipId: g.shipId, equip: g.equip, generators: g.generators,
     };
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (err) { storageOk = false; }
@@ -1397,7 +1589,8 @@
     g.zi = d.zi; g.zone = ZONES[d.zi];
     g.shipId = d.shipId; g.equip = d.equip; g.generators = d.generators;
     g.up = d.up; g.credits = d.credits; g.uridium = d.uridium; g.exp = d.exp; g.honor = d.honor;
-    g.cargo = d.cargo; g.mission = d.mission; g.kills = d.kills;
+    g.cargo = d.cargo;
+    if (Array.isArray(d.missions)) { g.missions = d.missions; g.nextMission = d.nextMission; }
     const p = g.p;
     p.x = d.x; p.y = d.y; p.maxHp = d.maxHp; p.hp = d.hp > 0 ? d.hp : d.maxHp;
     p.damage = d.damage; p.speed = d.speed;
@@ -1413,7 +1606,7 @@
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
-    if (!g.paused && !g.hangar.open) update(dt);
+    if (!g.paused && !g.hangar.open) { update(dt); checkTravel(); }
     draw();
     saveT += dt;
     if (saveT >= SAVE_EVERY) { saveT = 0; saveGame(); }
