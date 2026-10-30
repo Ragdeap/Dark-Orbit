@@ -13,6 +13,19 @@
 <canvas id="c"></canvas>
 <script>
 (() => {
+  // Sin servidor local no se juega: todo el progreso se guarda en data/save.json
+  const GAME_URL = 'http://localhost:3000/';
+  function showServerMissing() {
+    document.body.innerHTML = '<p style="margin:0;padding:24px;min-height:100vh;box-sizing:border-box;background:#0b1020;color:#d7e6ff;font:16px Consolas,monospace">'
+      + 'Dark Orbit necesita el servidor local para guardar la partida. Arráncalo con Jugar.bat (o con "node server.js") y vuelve a abrir el juego.</p>';
+  }
+  if (location.protocol === 'file:') {
+    // Con "no-cors" sólo se comprueba que el servidor responde, sin leer su contenido
+    fetch(GAME_URL + 'api/save', { mode: 'no-cors', cache: 'no-store' })
+      .then(() => location.replace(GAME_URL), showServerMissing);
+    return;
+  }
+
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
   let W = 0, H = 0, dpr = 1;
@@ -2055,7 +2068,7 @@
     // Izquierda arriba: solo el aviso de guardado. Casco, escudo y munición están en la ventana de nave
     if (!storageOk) {
       ctx.fillStyle = '#ff9f1a';
-      ctx.fillText('Progreso no guardado: ni el servidor ni el navegador guardan la partida', 16, 34);
+      ctx.fillText('Progreso no guardado: se ha perdido la conexión con el servidor', 16, 34);
     }
 
     ctx.textAlign = 'left';
@@ -2627,11 +2640,10 @@
   });
 
   // ---------- Guardado ----------
-  // El progreso se guarda en el servidor local (server.js). Si no hay servidor, se usa el navegador (localStorage)
-  const SAVE_KEY = 'dark-orbit-save';
+  // El progreso se guarda en el servidor local (server.js), nunca en el navegador
   const SAVE_EVERY = 5;   // segundos entre guardados automáticos
   let saveT = 0;
-  let storageOk = true;   // false si no se puede guardar ni en el servidor ni en el navegador
+  let storageOk = true;   // false si la última escritura en el servidor ha fallado
 
   function saveGame() {
     const p = g.p;
@@ -2643,16 +2655,13 @@
       playerId: g.playerId, playerPos: g.playerPos, navePos: g.navePos, teleportBonus: g.teleportBonus, lootKeys: g.lootKeys,
       shipId: g.shipId, equip: g.equip, generators: g.generators,
     };
-    const body = JSON.stringify(data);
-    fetch('/api/save', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body, keepalive: true })
-      .catch(() => { try { localStorage.setItem(SAVE_KEY, body); } catch (err) { storageOk = false; } });
+    fetch('/api/save', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), keepalive: true })
+      .then(r => { storageOk = r.ok; }, () => { storageOk = false; });
   }
 
-  // Lee el progreso del servidor; si no hay servidor (juego abierto como archivo), del navegador
+  // Lee el progreso del servidor. Si no responde, rechaza: el juego no debe arrancar sin él
   function readSave() {
-    return fetch('/api/save').then(r => (r.ok ? r.json() : null)).catch(() => {
-      try { return JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (err) { return null; }
-    });
+    return fetch('/api/save').then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
   }
 
   // Devuelve false si no hay progreso guardado válido; entonces se empieza de cero
@@ -2702,7 +2711,7 @@
     if (!loadGame(d)) reset();
     addEventListener('pagehide', saveGame);
     requestAnimationFrame(frame);
-  });
+  }, showServerMissing);
 })();
 </script>
 </body>
