@@ -1138,11 +1138,13 @@
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(px - 2, py - 2, 4, 4);
 
-    // Coordenadas de la nave en unidades, con el origen arriba a la izquierda
+    // Mapa actual a la izquierda y coordenadas de la nave a la derecha, en unidades
     ctx.fillStyle = '#cfe8ff';
     ctx.font = '12px Consolas, monospace';
     ctx.textAlign = 'left';
-    ctx.fillText(`X ${(g.p.x / UNIT_PX).toFixed(1)}   Y ${(g.p.y / UNIT_PX).toFixed(1)}`, mx, my - 8);
+    ctx.fillText(z.id, mx, my - 8);
+    ctx.textAlign = 'right';
+    ctx.fillText(`${Math.floor(g.p.x / UNIT_PX)} / ${Math.floor(g.p.y / UNIT_PX)}`, mx + mw, my - 8);
   }
 
   function drawBackground() {
