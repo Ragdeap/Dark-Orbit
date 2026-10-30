@@ -131,7 +131,7 @@
     saimon:   { name: 'Saimon',   sides: 6, r: 30, hp: 420, shield: 0, speed: 100, dmg: 18, range: 480, aggro: 600, cool: 1.8, shots: 2, rewards: money(150), color: '#2ec4b6' },
   };
 
-  // Bots aliados (VRU): jugadores simulados que no atacan ni son atacados. Solo están en 3-1 y 3-2.
+  // Bots (jugadores simulados) de VRU, aliados: no atacan ni son atacados. Solo están en 3-1 y 3-2. Los enemigos van aparte.
   // Empiezan de cero, igual que el jugador. Su exp y honor se guardan en data/save.json y el nivel se calcula con levelFor.
   const BOT_SIGHT = 900;          // distancia a la que el bot detecta un NPC
   const BOT_RANGE = 350;          // alcance de disparo del bot
@@ -143,12 +143,16 @@
   const BOT_RADIUS = 16;
   // Nave de los bots: deben ser naves reales del juego. De momento solo la Fénix (la de administrador no es legal)
   const BOT_SHIP = 'PHOENIX';
+  // enemy: de empresa rival; es hostil al jugador de forma permanente y no cruza puertas (de momento sólo en 3-1)
   const BOTS = [
-    { name: 'Blade', zone: '3-1', x: 36000, y: 20000 },
-    { name: 'Joker', zone: '3-1', x: 30000, y: 16000 },
-    { name: 'Phantom', zone: '3-1', x: 34000, y: 22000 },
-    { name: 'Black', zone: '3-2', x: 8000, y: 12000 },
-    { name: 'Kaelith', zone: '3-2', x: 12000, y: 18000 },
+    { name: 'Blade', zone: '3-1', x: 36000, y: 20000, company: 'VRU' },
+    { name: 'Joker', zone: '3-1', x: 30000, y: 16000, company: 'VRU' },
+    { name: 'Phantom', zone: '3-1', x: 34000, y: 22000, company: 'VRU' },
+    { name: 'Black', zone: '3-2', x: 8000, y: 12000, company: 'VRU' },
+    { name: 'Kaelith', zone: '3-2', x: 12000, y: 18000, company: 'VRU' },
+    { name: 'MMO-01', zone: '3-1', x: 12000, y: 8000, company: 'MMO', enemy: true },
+    { name: 'MMO-02', zone: '3-1', x: 14000, y: 11000, company: 'MMO', enemy: true },
+    { name: 'EIC-01', zone: '3-1', x: 10000, y: 13000, company: 'EIC', enemy: true },
   ];
 
   // Base de datos de naves. Para añadir una nave basta con añadir una entrada aquí;
@@ -285,7 +289,7 @@
         x: b.x, y: b.y, angle: 0, tx: b.x, ty: b.y, portal: false, target: null, cool: 0, wait: 0, hopT: rnd(30, 90),
         hp: SHIPS[BOT_SHIP].hp, maxHp: SHIPS[BOT_SHIP].hp, speed: SHIPS[BOT_SHIP].speed, dead: false, respawnT: 0,
         // isPlayer: los bonus de láser contra jugadores (LF-4 Magmadrill) también les afectan
-        isBot: true, isPlayer: true, hostile: false, rank: null, company: 'VRU',
+        isBot: true, isPlayer: true, enemy: !!b.enemy, hostile: !!b.enemy, rank: null, company: b.company,
       })),
     };
   }
@@ -966,7 +970,7 @@
   function updateAllies(dt) {
     for (const b of g.allies) {
       // El combate termina cuando muere uno de los dos: si la nave muere, el bot olvida la pelea
-      if (g.p.dead) b.hostile = false;
+      if (g.p.dead && !b.enemy) b.hostile = false;
       if (b.dead) {
         b.respawnT -= dt;
         if (b.respawnT <= 0) respawnBot(b);
@@ -974,7 +978,7 @@
       }
       if (b.zi === g.zi) {
         updateBotActive(b, dt);
-      } else {
+      } else if (!b.enemy) {
         b.hopT -= dt;
         if (b.hopT <= 0) crossBotPortal(b);
       }
@@ -983,7 +987,7 @@
 
   function updateBotActive(b, dt) {
     // Si la nave le ha atacado, le devuelve el ataque como a un jugador hostil, sin atender a los NPC
-    if (b.hostile) {
+    if (b.hostile && !g.p.dead) {
       const d = dist(b.x, b.y, g.p.x, g.p.y);
       b.angle = Math.atan2(g.p.y - b.y, g.p.x - b.x);
       if (d > BOT_RANGE * 0.7) botMoveTo(b, g.p.x, g.p.y, dt);
@@ -1027,7 +1031,7 @@
     const base = ZONES[b.zi].base;
     b.dead = false; b.hp = b.maxHp;
     b.x = base.x; b.y = base.y; b.tx = b.x; b.ty = b.y;
-    b.wait = 0; b.target = null; b.portal = false; b.hostile = false;
+    b.wait = 0; b.target = null; b.portal = false; b.hostile = !!b.enemy;
   }
 
   // Mueve al bot hacia (x, y) a su velocidad; devuelve true al llegar
@@ -1044,7 +1048,7 @@
   // Un punto aleatorio del mapa o, una de cada cinco veces, la puerta del mapa
   function chooseBotGoal(b) {
     const z = ZONES[b.zi], pts = portalsOf(b.zi);
-    b.portal = pts.length > 0 && Math.random() < 0.2;
+    b.portal = !b.enemy && pts.length > 0 && Math.random() < 0.2;
     if (b.portal) {
       b.tx = pts[0].x; b.ty = pts[0].y;
     } else {
@@ -1274,7 +1278,8 @@
     for (const b of g.allies) {
       if (b.zi !== g.zi || b.dead) continue;
       const x = sx(b.x), y = sy(b.y);
-      drawPoly(x, y, b.angle, polyPts(3, 16), '#6fe39a', '#ffffff22');
+      const color = b.enemy ? '#ff5c5c' : '#6fe39a';
+      drawPoly(x, y, b.angle, polyPts(3, 16), color, '#ffffff22');
       if (b.hp < b.maxHp) bar(x - 18, y - 26, 36, 4, b.hp / b.maxHp, '#ff5c5c');
       if (g.p.target === b) {
         ctx.beginPath();
@@ -1283,9 +1288,20 @@
         ctx.lineWidth = 1.5;
         ctx.stroke();
       }
-      ctx.fillStyle = '#6fe39a';
-      ctx.font = '13px Consolas, monospace';
       ctx.textAlign = 'center';
+      if (b.enemy || b.company === g.p.company) {
+        // Enemigos en rojo y aliados de la empresa del jugador en azul (aliados, no de otra empresa).
+        // Ambos con el mismo estilo que el nombre del jugador: negrita y borde negro
+        ctx.font = 'bold 15px Consolas, monospace';
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#000000';
+        ctx.strokeText(b.name, x, y + 16 + 22);
+        ctx.fillStyle = b.enemy ? '#ff5c5c' : '#4da6ff';
+      } else {
+        ctx.fillStyle = color;
+        ctx.font = '13px Consolas, monospace';
+      }
       ctx.fillText(b.name, x, y + 16 + 22);
       const nameW = ctx.measureText(b.name).width;
       if (b.rank != null) drawRank(b.rank, x - nameW / 2 - 4, y + 16 + 22 - 6);
@@ -2375,9 +2391,9 @@
       ctx.arc(ox + a.x * s, oy + a.y * s, 1.5, 0, Math.PI * 2);
       ctx.fill();
     }
-    ctx.fillStyle = '#4da6ff';
     for (const b of g.allies) {
       if (b.zi !== g.zi || b.dead) continue;
+      ctx.fillStyle = b.enemy ? '#ff5c5c' : '#4da6ff';
       ctx.beginPath();
       ctx.arc(ox + b.x * s, oy + b.y * s, 1.5, 0, Math.PI * 2);
       ctx.fill();
