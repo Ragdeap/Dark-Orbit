@@ -112,10 +112,29 @@
     saimon:   { name: 'Saimon',   sides: 6, r: 30, hp: 420, shield: 0, speed: 100, dmg: 18, range: 480, aggro: 600, cool: 1.8, shots: 2, rewards: money(150), color: '#2ec4b6' },
   };
 
+  // Bots aliados (VRU): jugadores simulados que no atacan ni son atacados. Solo están en 3-1 y 3-2.
+  // exp y honor son valores de prueba; el nivel se calcula con levelFor igual que el del jugador.
+  const BOT_SIGHT = 900;          // distancia a la que el bot detecta un NPC
+  const BOT_RANGE = 350;          // alcance de disparo del bot
+  const BOT_COOL = 0.8;           // segundos entre disparos
+  const BOT_LASER = 'LF1';        // láser equipado por los bots; de momento cualquiera, el de la Fénix por defecto
+  const BOT_BULLET_SPEED = 900;
+  const BOT_RESPAWN = 3;          // segundos hasta reaparecer en la base, igual que la nave
+  const BOT_RADIUS = 16;
+  // Nave de los bots: deben ser naves reales del juego. De momento solo la Fénix (la de administrador no es legal)
+  const BOT_SHIP = 'PHOENIX';
+  const BOTS = [
+    { name: 'Blade', zone: '3-1', x: 36000, y: 20000, exp: 25000, honor: 120 },
+    { name: 'Joker', zone: '3-1', x: 30000, y: 16000, exp: 6000, honor: 40 },
+    { name: 'Phantom', zone: '3-1', x: 34000, y: 22000, exp: 12000, honor: 60 },
+    { name: 'Black', zone: '3-2', x: 8000, y: 12000, exp: 90000, honor: 380 },
+    { name: 'Kaelith', zone: '3-2', x: 12000, y: 18000, exp: 3000, honor: 15 },
+  ];
+
   // Base de datos de naves. Para añadir una nave basta con añadir una entrada aquí;
   // sus ranuras de láser se crean automáticamente.
   const SHIPS = {
-    PHOENIX: { name: 'Phoenix', hp: 104000, speed: 480, slots: 1, genSlots: 1, cargo: 100 },
+    PHOENIX: { name: 'Phoenix', hp: 104000, speed: 320, slots: 1, genSlots: 1, cargo: 100 },
     // Nave de pruebas del entorno de desarrollo, no es una nave oficial
     ADMINISTRADOR: { name: 'Administrador', hp: 500000, speed: 800, slots: 20, genSlots: 20, cargo: 5000 },
   };
@@ -241,6 +260,13 @@
       equip: { PHOENIX: ['LF1'] },
       generators: {},
       hangar: { open: false, sel: { type: 'laser', i: 0 } },
+      allies: BOTS.map((b, i) => ({
+        id: i, name: b.name, zi: ZONES.findIndex(z => z.id === b.zone), exp: b.exp, honor: b.honor,
+        x: b.x, y: b.y, angle: 0, tx: b.x, ty: b.y, portal: false, target: null, cool: 0, wait: 0, hopT: rnd(30, 90),
+        hp: SHIPS[BOT_SHIP].hp, maxHp: SHIPS[BOT_SHIP].hp, speed: SHIPS[BOT_SHIP].speed, dead: false, respawnT: 0,
+        // isPlayer: los bonus de láser contra jugadores (LF-4 Magmadrill) también les afectan
+        isBot: true, isPlayer: true, hostile: false,
+      })),
     };
   }
 
@@ -380,10 +406,13 @@
     g.texts = g.texts.filter(t => t.life > 0);
   }
 
-  function killAlien(a) {
+  // Solo las bajas del jugador dan recompensas, cargo y progreso de misiones; las de un bot solo hacen explotar al NPC
+  function killAlien(a, by = g.p) {
     const t = ALIEN[a.type];
     explode(a.x, a.y, t.r, t.color);
     playExplosionSound();
+    if (g.p.target === a) { g.p.target = null; g.p.attacking = false; }
+    if (by !== g.p) return;
     const r = t.rewards;
     g.credits += r.credits;
     g.uridium += r.uridium;
@@ -396,7 +425,6 @@
     g.rewardT = 3;
     if (r.cargo) g.pickups.push({ x: a.x, y: a.y, type: 'cargo', cargo: r.cargo, life: 60 });
     if (Math.random() < 0.10) g.pickups.push({ x: a.x, y: a.y, type: 'repair', life: 20 });
-    if (g.p.target === a) { g.p.target = null; g.p.attacking = false; }
     checkMission(a.type);
   }
 
@@ -439,18 +467,20 @@
     g.missionSel = g.missions.length - 1;
   }
 
-  function hitAlien(a, dmg) {
+  function hitAlien(a, dmg, by = g.p) {
     // Con escudo, el 80 % del daño va al escudo y el 20 % a la vida; si el escudo no alcanza, el resto pasa a la vida.
     // Sin escudo, todo el daño va a la vida.
     const toShield = a.shield > 0 ? Math.min(a.shield, Math.floor(dmg * 0.8)) : 0;
     a.shield -= toShield;
     a.hp -= dmg - toShield;
     spawnText(a.x, a.y - ALIEN[a.type].r - 6, Math.round(dmg), '#ff4d4d');
+    // El NPC ataca a quien le dispara, sea la nave o un bot
     a.aggro = true;
+    a.victim = by;
     a.hit = 0.1;
     const t = ALIEN[a.type];
     if (t.flee && a.hp > 0 && a.hp <= t.hp * t.flee) a.fleeing = true;
-    if (a.hp <= 0) { a.hp = 0; killAlien(a); }
+    if (a.hp <= 0) { a.hp = 0; killAlien(a, by); }
   }
 
   function hurt(d) {
@@ -740,6 +770,7 @@
     }
 
     updateAliens(dt);
+    updateAllies(dt);
     updateBullets(dt);
     updateEnemyShots(dt);
     updatePickups(dt);
@@ -759,7 +790,7 @@
 
   function updatePlayer(dt) {
     const p = g.p, z = g.zone;
-    if (p.target && p.target.hp <= 0) { p.target = null; p.attacking = false; }
+    if (p.target && (p.target.hp <= 0 || (p.target.isBot && !targetable(p.target)))) { p.target = null; p.attacking = false; }
     p.cool -= dt;
     p.missCool = Math.max(0, p.missCool - dt);
 
@@ -790,21 +821,57 @@
     // Portal a la siguiente zona
   }
 
+  // Un objetivo es la nave o un bot. Solo se persigue o se dispara a objetivos vivos y en este mapa
+  function targetable(v) {
+    if (v === g.p) return !g.p.dead;
+    return v.zi === g.zi && !v.dead;
+  }
+
+  // Objetivo más cercano dentro de r: la nave (si no está en base) o un bot vivo de este mapa
+  function nearestVictim(x, y, r, atBase) {
+    let best = null, bd = r;
+    if (!atBase && targetable(g.p)) {
+      const d = dist(x, y, g.p.x, g.p.y);
+      if (d < bd) { bd = d; best = g.p; }
+    }
+    for (const b of g.allies) {
+      if (!targetable(b)) continue;
+      const d = dist(x, y, b.x, b.y);
+      if (d < bd) { bd = d; best = b; }
+    }
+    return best;
+  }
+
+  // Objetivo que el ratón puede fijar: un NPC o un bot vivo de este mapa
+  function nearestFoe(x, y, r) {
+    let best = nearestAlien(x, y, r), bd = best ? dist(x, y, best.x, best.y) : r;
+    for (const b of g.allies) {
+      if (!targetable(b)) continue;
+      const d = dist(x, y, b.x, b.y);
+      if (d < bd) { bd = d; best = b; }
+    }
+    return best;
+  }
+
   function updateAliens(dt) {
     const p = g.p, z = g.zone;
     const atBase = dist(p.x, p.y, z.base.x, z.base.y) < z.base.r;
     for (const a of g.aliens) {
       const t = ALIEN[a.type];
-      const dP = dist(a.x, a.y, p.x, p.y);
-      // Los pasivos solo atacan si se les dispara; el resto detecta a la nave en su radio
-      if (!p.dead && !a.aggro && !t.passive && dP < t.aggro) a.aggro = true;
-      // Persiguen hasta que la nave llega a la base (un portal cambia de mapa y limpia todo)
-      if (atBase) { a.aggro = false; a.fleeing = false; }
+      // Persiguen a su objetivo hasta que muere o, si es la nave, llega a la base (un portal cambia de mapa y limpia todo)
+      if (a.victim && (!targetable(a.victim) || (a.victim === p && atBase))) a.victim = null;
+      if (!a.victim) { a.aggro = false; a.fleeing = false; }
+      // Los pasivos solo atacan si se les dispara; el resto detecta un objetivo en su radio
+      if (!a.aggro && !t.passive) {
+        const c = nearestVictim(a.x, a.y, t.aggro, atBase);
+        if (c) { a.aggro = true; a.victim = c; }
+      }
 
-      const dx = p.x - a.x, dy = p.y - a.y, d = Math.hypot(dx, dy) || 1;
-      const nx = dx / d, ny = dy / d;
+      const v = a.aggro ? a.victim : null;
       let wx = 0, wy = 0;
-      if (a.aggro && !p.dead) {
+      if (v) {
+        const dx = v.x - a.x, dy = v.y - a.y, d = Math.hypot(dx, dy) || 1;
+        const nx = dx / d, ny = dy / d;
         let ux, uy;
         if (a.fleeing) { ux = -nx; uy = -ny; }
         else if (d > t.range * 0.8) { ux = nx; uy = ny; }
@@ -851,6 +918,123 @@
     return Math.hypot(x1 + dx * t - x, y1 + dy * t - y);
   }
 
+  // Bots: cazan NPC, recorren el mapa y cambian de mapa por sus puertas. Solo actúan en el mapa de la nave,
+  // porque solo ahí existen NPC; en los demás mapas solo cuentan los segundos hasta su próximo salto.
+  function updateAllies(dt) {
+    for (const b of g.allies) {
+      // El combate termina cuando muere uno de los dos: si la nave muere, el bot olvida la pelea
+      if (g.p.dead) b.hostile = false;
+      if (b.dead) {
+        b.respawnT -= dt;
+        if (b.respawnT <= 0) respawnBot(b);
+        continue;
+      }
+      if (b.zi === g.zi) {
+        updateBotActive(b, dt);
+      } else {
+        b.hopT -= dt;
+        if (b.hopT <= 0) crossBotPortal(b);
+      }
+    }
+  }
+
+  function updateBotActive(b, dt) {
+    // Si la nave le ha atacado, le devuelve el ataque como a un jugador hostil, sin atender a los NPC
+    if (b.hostile) {
+      const d = dist(b.x, b.y, g.p.x, g.p.y);
+      b.angle = Math.atan2(g.p.y - b.y, g.p.x - b.x);
+      if (d > BOT_RANGE * 0.7) botMoveTo(b, g.p.x, g.p.y, dt);
+      b.cool -= dt;
+      if (b.cool <= 0 && d <= BOT_RANGE) botFire(b, g.p);
+      return;
+    }
+    if (!b.target || !g.aliens.includes(b.target)) b.target = nearestAlien(b.x, b.y, BOT_SIGHT);
+    const t = b.target;
+    if (t) {
+      const d = dist(b.x, b.y, t.x, t.y);
+      b.angle = Math.atan2(t.y - b.y, t.x - b.x);
+      if (d > BOT_RANGE * 0.7) botMoveTo(b, t.x, t.y, dt);
+      b.cool -= dt;
+      if (b.cool <= 0 && d <= BOT_RANGE) botFire(b, t);
+      return;
+    }
+    // Sin objetivo: espera un momento y, al llegar, elige el siguiente punto o puerta
+    if (b.wait > 0) { b.wait -= dt; return; }
+    if (botMoveTo(b, b.tx, b.ty, dt)) {
+      if (b.portal) { crossBotPortal(b); return; }
+      chooseBotGoal(b);
+      b.wait = rnd(2, 5);
+    }
+  }
+
+  // Daño a un bot: igual que a la nave, pero sin escudo. Al morir explota y reaparece en la base de su mapa
+  function hurtBot(b, d) {
+    if (b.dead) return;
+    spawnText(b.x, b.y - 30, Math.round(d), '#b07cff');
+    b.hp -= d;
+    if (b.hp <= 0) {
+      b.hp = 0; b.dead = true; b.respawnT = BOT_RESPAWN;
+      b.target = null; b.portal = false; b.hostile = false;
+      explode(b.x, b.y, 22, '#6fe39a');
+    }
+  }
+
+  function respawnBot(b) {
+    const base = ZONES[b.zi].base;
+    b.dead = false; b.hp = b.maxHp;
+    b.x = base.x; b.y = base.y; b.tx = b.x; b.ty = b.y;
+    b.wait = 0; b.target = null; b.portal = false; b.hostile = false;
+  }
+
+  // Mueve al bot hacia (x, y) a su velocidad; devuelve true al llegar
+  function botMoveTo(b, x, y, dt) {
+    const d = dist(b.x, b.y, x, y);
+    if (d < 4) return true;
+    const s = Math.min(b.speed * dt, d);
+    b.angle = Math.atan2(y - b.y, x - b.x);
+    b.x += Math.cos(b.angle) * s;
+    b.y += Math.sin(b.angle) * s;
+    return false;
+  }
+
+  // Un punto aleatorio del mapa o, una de cada cinco veces, la puerta del mapa
+  function chooseBotGoal(b) {
+    const z = ZONES[b.zi], pts = portalsOf(b.zi);
+    b.portal = pts.length > 0 && Math.random() < 0.2;
+    if (b.portal) {
+      b.tx = pts[0].x; b.ty = pts[0].y;
+    } else {
+      b.tx = rnd(600, z.w - 600); b.ty = rnd(600, z.h - 600);
+    }
+  }
+
+  // El bot cruza la puerta de su mapa y aparece junto a la del destino, igual que la nave
+  function crossBotPortal(b) {
+    const pt = portalsOf(b.zi)[0];
+    b.zi = pt.to; b.x = pt.spawn.x; b.y = pt.spawn.y;
+    b.tx = b.x; b.ty = b.y; b.portal = false; b.target = null;
+    b.wait = rnd(2, 5); b.hopT = rnd(30, 90);
+  }
+
+  // Disparo de bot. Contra un NPC es un proyectil verde, que no da recompensa al jugador.
+  // Contra la nave es un disparo como el de un NPC, que no puede alcanzar al propio bot
+  function botFire(b, t) {
+    const ang = Math.atan2(t.y - b.y, t.x - b.x);
+    b.cool = BOT_COOL;
+    if (t === g.p) {
+      g.enemyShots.push({
+        x: b.x, y: b.y, vx: Math.cos(ang) * 300, vy: Math.sin(ang) * 300,
+        life: BOT_RANGE / 300, dmg: LASERS[BOT_LASER].damage, miss: Math.random() < MISS_CHANCE, from: b,
+      });
+      return;
+    }
+    g.bullets.push({
+      x: b.x + Math.cos(ang) * 18, y: b.y + Math.sin(ang) * 18,
+      vx: Math.cos(ang) * BOT_BULLET_SPEED, vy: Math.sin(ang) * BOT_BULLET_SPEED,
+      life: BOT_RANGE / BOT_BULLET_SPEED, dmg: LASERS[BOT_LASER].damage, color: '#6fe39a', bot: b,
+    });
+  }
+
   function updateBullets(dt) {
     for (const b of g.bullets) {
       if (b.homing && b.target && b.target.hp > 0) {
@@ -865,9 +1049,12 @@
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
       if (b.life <= 0) continue;
       // Se comprueba el tramo recorrido en el frame, para que un proyectil rápido no atraviese al NPC
-      for (const a of g.aliens) {
-        if (a.hp > 0 && segDist(a.x, a.y, px, py, b.x, b.y) < ALIEN[a.type].r) {
-          hitAlien(a, b.dmg);
+      // Un proyectil del jugador también puede dar al bot que tiene fijado; los de un bot solo dan a NPC
+      const foes = b.bot ? g.aliens : [...g.aliens, ...g.allies.filter(x => x === b.target)];
+      for (const a of foes) {
+        if (a.hp > 0 && segDist(a.x, a.y, px, py, b.x, b.y) < (a.isBot ? BOT_RADIUS : ALIEN[a.type].r)) {
+          if (a.isBot) { a.hostile = true; hurtBot(a, b.dmg); }
+          else hitAlien(a, b.dmg, b.bot || g.p);
           if (b.missile) {
             playMissileImpactSound();
             explode(b.x, b.y, 16, b.color);
@@ -883,14 +1070,14 @@
   }
 
   function updateEnemyShots(dt) {
-    const p = g.p;
     for (const s of g.enemyShots) {
       s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt;
-      // Un disparo fallado sigue de largo y no impacta en la nave
-      if (!p.dead && !s.miss && s.life > 0 && dist(s.x, s.y, p.x, p.y) < 14) {
-        hurt(s.dmg);
-        s.life = 0;
-      }
+      // Un disparo fallado sigue de largo; el resto impacta en la primera nave que toca (la del jugador o un bot)
+      if (s.miss || s.life <= 0) continue;
+      const hit = [g.p, ...g.allies].find(v => v !== s.from && targetable(v) && dist(s.x, s.y, v.x, v.y) < 14);
+      if (!hit) continue;
+      if (hit === g.p) hurt(s.dmg); else hurtBot(hit, s.dmg);
+      s.life = 0;
     }
     g.enemyShots = g.enemyShots.filter(s => s.life > 0);
   }
@@ -1037,6 +1224,28 @@
     }
   }
 
+  // Bots aliados: triángulo verde con su nombre y nivel. No están en g.aliens, así que no son objetivos
+  function drawAllies() {
+    for (const b of g.allies) {
+      if (b.zi !== g.zi || b.dead) continue;
+      const x = sx(b.x), y = sy(b.y);
+      drawPoly(x, y, b.angle, polyPts(3, 16), '#6fe39a', '#ffffff22');
+      if (b.hp < b.maxHp) bar(x - 18, y - 26, 36, 4, b.hp / b.maxHp, '#ff5c5c');
+      if (g.p.target === b) {
+        ctx.beginPath();
+        ctx.arc(x, y, 24, 0, Math.PI * 2);
+        ctx.strokeStyle = g.p.attacking ? '#ff4d6d' : '#ffd166';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#6fe39a';
+      ctx.font = '11px Consolas, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(b.name, x, y + 16 + 22);
+      ctx.textAlign = 'left';
+    }
+  }
+
   function drawPickups() {
     for (const k of g.pickups) {
       const x = sx(k.x), y = sy(k.y);
@@ -1116,6 +1325,9 @@
     ctx.stroke();
   }
 
+  // Nombre fijo del jugador (de momento no tiene nomenclatura propia)
+  const PLAYER_NAME = 'Ragdeap';
+
   function drawPlayer() {
     const p = g.p;
     if (p.dead) return;
@@ -1136,6 +1348,17 @@
     ctx.strokeStyle = '#5aa8ff';
     ctx.lineWidth = 1.5;
     ctx.stroke();
+    ctx.restore();
+    // Nombre del jugador debajo de la nave: blanco y grueso, con borde negro
+    ctx.save();
+    ctx.font = 'bold 12px Consolas, monospace';
+    ctx.textAlign = 'center';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#000000';
+    ctx.strokeText(PLAYER_NAME, cx, cy + 36);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(PLAYER_NAME, cx, cy + 36);
     ctx.restore();
   }
 
@@ -2037,6 +2260,13 @@
       ctx.arc(ox + a.x * s, oy + a.y * s, 1.5, 0, Math.PI * 2);
       ctx.fill();
     }
+    ctx.fillStyle = '#4da6ff';
+    for (const b of g.allies) {
+      if (b.zi !== g.zi || b.dead) continue;
+      ctx.beginPath();
+      ctx.arc(ox + b.x * s, oy + b.y * s, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
     for (const portal of portalsOf(g.zi)) {
       ctx.fillStyle = '#ffd166';
       ctx.fillRect(ox + portal.x * s - 2, oy + portal.y * s - 2, 4, 4);
@@ -2137,6 +2367,7 @@
     drawStation();
     drawPickups();
     drawAliens();
+    drawAllies();
     drawProjectiles();
     drawParticles();
     drawTexts();
@@ -2254,7 +2485,7 @@
     // Clic sobre una caja de carga: la nave viaja hasta ella y la recoge al llegar
     const box = e.button === 0 ? g.pickups.find(k => k.type === 'cargo' && dist(k.x, k.y, wx, wy) < 18) : null;
     if (box) { box.want = true; g.p.tx = box.x; g.p.ty = box.y; return; }
-    const a = e.button === 0 ? nearestAlien(wx, wy, 40) : null;
+    const a = e.button === 0 ? nearestFoe(wx, wy, 40) : null;
     if (a) {
       if (e.detail >= 2) startAttack(a);        // doble clic: inicia el ataque
       else if (a !== g.p.target) { g.p.target = a; g.p.attacking = false; }  // clic simple: cambia el objetivo fijado
