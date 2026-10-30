@@ -9,12 +9,14 @@ Estados: **Confirmado** = dato del usuario. **Provisional** = valor propio pendi
 
 | NPC | Mapas | Vida | Escudo | Recompensas | Estado |
 |---|---|---|---|---|---|
-| Streuner | 3-1 | 800 | 400 | Ver tabla de recompensas | Vida, escudo y recompensas confirmados; velocidad y alcance provisionales |
-| Recruit Streuner | 3-1 | 600 | 800 | 500 exp, 3 honor, 500 créditos, 2 uridium + caja | Vida, escudo y recompensas confirmados; velocidad, alcance y cadencia provisionales |
-| Aider Streuner | 3-1 | 1500 | 1000 | 700 exp, 4 honor, 700 créditos, 2 uridium + caja | Vida, escudo y recompensas confirmados; velocidad, alcance y cadencia provisionales |
-| Lordakia | — (sin mapa asignado) | 110 | 0 | 40 créditos | Provisional |
+| Streuner | 1-1, 1-2, 2-1, 2-2, 3-1, 3-2 | 800 | 400 | Ver tabla de recompensas | Vida, escudo y recompensas confirmados; velocidad y alcance provisionales |
+| Recruit Streuner | 1-1, 1-2, 2-1, 2-2, 3-1, 3-2 | 600 | 800 | 500 exp, 3 honor, 500 créditos, 2 uridium + caja | Vida, escudo y recompensas confirmados; velocidad, alcance y cadencia provisionales |
+| Aider Streuner | 1-1, 1-2, 2-1, 2-2, 3-1, 3-2 | 1500 | 1000 | 700 exp, 4 honor, 700 créditos, 2 uridium + caja | Vida, escudo y recompensas confirmados; velocidad, alcance y cadencia provisionales |
+| Lordakia | 2-2, 3-2, 1-2, 1-3, 2-3, 3-3, 1-4, 2-4, 3-4, 1-5, 2-5, 3-5 | 2000 | 2000 | 800 exp, 4 honor, 800 créditos, 2 uridium + caja | Vida, escudo, daño y recompensas confirmados; velocidad, alcance, detección y cadencia provisionales |
 | Mordon | — (sin mapa asignado) | 260 | 0 | 90 créditos | Provisional |
 | Saimon | — (sin mapa asignado) | 420 | 0 | 150 créditos | Provisional |
+| Boss Lordakia | 1-2, 2-2, 3-2 | 8000 | 8000 | 3200 exp, 16 honor, 3200 créditos, 8 uridium + caja | Vida, escudo, daño y recompensas confirmados; velocidad, alcance, detección, cadencia, radio y disparos provisionales |
+| Boss Streuner | 1-2, 2-2, 3-2 | 3200 | 1600 | 1600 exp, 8 honor, 1600 créditos, 4 uridium + caja | Vida, escudo, daño y recompensas confirmados; velocidad, alcance, detección, cadencia y tipo provisionales |
 
 ## Recompensas
 
@@ -25,12 +27,34 @@ Las recompensas son fijas y se otorgan al destruir al NPC.
 | Streuner | 400 | 2 | 400 | 1 | 10 Prometium + 10 Terbium |
 | Recruit Streuner | 500 | 3 | 500 | 2 | 12 Prometium + 12 Terbium |
 | Aider Streuner | 700 | 4 | 700 | 2 | 15 Prometium + 15 Terbium |
-| Lordakia | — | — | 40 (provisional) | — | — |
+| Lordakia | 800 | 4 | 800 | 2 | 20 Prometium + 20 Terbium + 20 Endurium |
 | Mordon | — | — | 90 (provisional) | — | — |
 | Saimon | — | — | 150 (provisional) | — | — |
+| Boss Lordakia | 3200 | 16 | 3200 | 8 | 80 Prometium + 80 Terbium + 80 Endurium + 10 Prometid + 1 Xenomita |
+| Boss Streuner | 1600 | 8 | 1600 | 4 | 40 Prometium + 10 Terbium + 40 Endurium |
 
-- **Caja de carga:** es garantizada. Cada NPC que tiene caja en su ficha la suelta siempre al morir, con la cantidad indicada. Aparece en el lugar donde murió el NPC y desaparece si no se recoge. Hay que hacer clic sobre ella: la nave viaja hasta la caja y la recoge al llegar, sumando sus 10 Prometium y 10 Terbium al inventario.
+- **Caja de carga:** es garantizada. Cada NPC que tiene caja en su ficha la suelta siempre al morir, con la cantidad indicada. Aparece en el lugar donde murió el NPC y desaparece si no se recoge. Hay que hacer clic sobre ella: la nave viaja hasta la caja y la recoge al llegar, sumando al inventario exactamente las materias que indica la ficha de ese NPC.
 - Los datos de Recruit, Aider, Lordakia, Mordon y Saimon son provisionales y tienen que confirmarse.
+
+## Materias primas que suelta cada NPC
+
+Cantidad de cada materia en la caja de carga del NPC. El orden es el de la tabla de materias (`MATERIALS` en el código). Un 0 significa que esa materia no sale de ese NPC.
+
+| NPC | Prometium | Endurium | Terbium | Prometid | Duranium | Promerium |
+|---|---|---|---|---|---|---|
+| Streuner | 10 | 0 | 10 | 0 | 0 | 0 |
+| Recruit Streuner | 12 | 0 | 12 | 0 | 0 | 0 |
+| Aider Streuner | 15 | 0 | 15 | 0 | 0 | 0 |
+| Boss Streuner | 40 | 40 | 10 | 0 | 0 | 0 |
+| Lordakia | 20 | 20 | 20 | 0 | 0 | 0 |
+| Boss Lordakia | 80 | 80 | 80 | 10 | 0 | 0 |
+| Mordon | — (sin caja) | — | — | — | — | — |
+| Saimon | — (sin caja) | — | — | — | — | — |
+
+### Materias de refinamiento
+
+- **Xenomita:** la suelta el Boss Lordakia (1 unidad). No ocupa espacio en la bodega, su almacenamiento es ilimitado y no se puede vender. Sirve como materia prima para mejorar otras materias mediante el refinamiento (pendiente de definir).
+- En el código se guarda en su propio almacén (`refine`), separado de la bodega y de la estación de venta.
 
 ## Estadísticas completas
 
@@ -39,9 +63,11 @@ Las recompensas son fijas y se otorgan al destruir al NPC.
 | Streuner | 16 | 90 | 20 | 260 | 350 | 1.6 | 1 | Cuadrado |
 | Recruit Streuner | 18 | 100 | 40 | 280 | 380 | 1.4 | 1 | Cuadrado |
 | Aider Streuner | 15 | 110 | 70 | 320 | 300 | 2.0 | 1 | Pentágono |
-| Lordakia | 18 | 160 | 8 | 300 | 450 | 1.2 | 1 | Triángulo |
+| Lordakia | 18 | 160 | 80 | 300 | 450 | 1.2 | 1 | Triángulo |
 | Mordon | 26 | 70 | 14 | 420 | 520 | 2.2 | 3 (abanico) | Octágono |
 | Saimon | 30 | 100 | 18 | 480 | 600 | 1.8 | 2 | Hexágono |
+| Boss Streuner | 26 | 80 | 100 | 300 | 350 | 1.6 | 2 | Cuadrado |
+| Boss Lordakia | 26 | 130 | 320 | 320 | 450 | 1.2 | 2 | Triángulo |
 
 - **Radio:** tamaño visual y de colisión.
 - **Detección:** distancia a la que el NPC empieza a perseguir (solo los no pasivos).
@@ -67,11 +93,16 @@ Las recompensas son fijas y se otorgan al destruir al NPC.
 - Mismo comportamiento que el Streuner.
 - Dispara menos (cadencia 2.0 s) y tiene más alcance (320).
 
-### Lordakia, Mordon y Saimon
+### Lordakia
+- **Tipo:** hostil. Ataca a la nave nada más verla, dentro de su detección (450).
+- No hay comportamiento de huida definido.
+- Mapas: X2 a X5 en las tres facciones (ver tabla de resumen).
+
+### Mordon y Saimon
 - **Tipo:** agresivo (provisional).
 - Atacan al detectar la nave y persiguen tras recibir daño.
 - No hay comportamiento de huida definido.
-- No aparecen en el mapa 3-1.
+- Solo en el mapa 3-2 por ahora.
 
 ## Reglas comunes
 
@@ -82,6 +113,7 @@ Las recompensas son fijas y se otorgan al destruir al NPC.
 - **Daño por disparo:** cada disparo hace entre el 75 % y el 100 % del daño máximo del NPC. Por ejemplo, el Streuner (máximo 20) hace entre 15 y 20.
 - **Fallo:** cada disparo tiene un 20 % de probabilidad de fallar. Un disparo fallado sigue de largo y no daña la nave.
 - **Aparición:** los NPC no aparecen cerca de la base (distancia mínima de 600 px).
+- **Mapas de Streuner, Recruit Streuner y Aider Streuner:** solo aparecen en los mapas X-1 y X-2: 1-1, 1-2, 2-1, 2-2, 3-1 y 3-2.
 
 ## Pendiente de validar
 

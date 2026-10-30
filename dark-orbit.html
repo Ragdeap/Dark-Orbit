@@ -48,7 +48,7 @@
     },
     {
       id: '3-2', name: '3-2 · VRU', faction: 'VRU', w: MAP_W, h: MAP_H,
-      types: ['lordakia', 'mordon', 'saimon'],
+      types: ['lordakia', 'mordon', 'saimon', 'bossStreuner', 'bossLordakia'],
       bgTop: '#2a2a0c', bgBottom: '#0a0802',
       base: { x: 2500, y: MAP_H / 2, r: 250 },
       station: { x: 2620, y: MAP_H / 2 - 90 },
@@ -60,13 +60,25 @@
   // Recompensa solo en créditos (provisional para los NPC cuyas recompensas aún no están confirmadas)
   const money = credits => ({ exp: 0, honor: 0, credits, uridium: 0, cargo: null });
 
+  // Mapas donde aparecen Streuner, Recruit Streuner y Aider Streuner (solo mapas X-1 y X-2)
+  const STREUNER_MAPS = ['1-1', '1-2', '2-1', '2-2', '3-1', '3-2'];
+  // Mapas donde aparece Lordakia (de X2 a X5 en cada facción)
+  const LORDAKIA_MAPS = ['1-2', '2-2', '3-2', '1-3', '2-3', '3-3', '1-4', '2-4', '3-4', '1-5', '2-5', '3-5'];
+  // Mapas donde aparece el Boss Lordakia (solo X2)
+  const BOSS_LORDAKIA_MAPS = ['1-2', '2-2', '3-2'];
+
   const ALIEN = {
     // passive: solo atacan si se les dispara. flee: huyen al bajar a esa fracción de vida.
-    streuner: { name: 'Streuner', sides: 4, r: 16, hp: 800,  shield: 400,  speed: 90,  dmg: 20, range: 260, aggro: 350, cool: 1.6, shots: 1, rewards: { exp: 400, honor: 2, credits: 400, uridium: 1, cargo: { prometium: 10, terbium: 10 } }, color: '#e0553f', passive: true },
+    streuner: { name: 'Streuner', sides: 4, r: 16, hp: 800,  shield: 400,  speed: 90,  dmg: 20, range: 260, aggro: 350, cool: 1.6, shots: 1, rewards: { exp: 400, honor: 2, credits: 400, uridium: 1, cargo: { prometium: 10, terbium: 10 } }, maps: STREUNER_MAPS, color: '#e0553f', passive: true },
     // Variantes del Streuner (velocidad, daño y recompensa provisionales)
-    recruit:  { name: 'Recruit Streuner', sides: 4, r: 18, hp: 600,  shield: 800,  speed: 100, dmg: 40, range: 280, aggro: 380, cool: 1.4, shots: 1, rewards: { exp: 500, honor: 3, credits: 500, uridium: 2, cargo: { prometium: 12, terbium: 12 } }, color: '#e07a3f', flee: 0.2 },
-    aider:    { name: 'Aider Streuner',   sides: 5, r: 15, hp: 1500, shield: 1000, speed: 110, dmg: 70, range: 320, aggro: 300, cool: 2.0, shots: 1, rewards: { exp: 700, honor: 4, credits: 700, uridium: 2, cargo: { prometium: 15, terbium: 15 } }, color: '#6fd3a0', passive: true },
-    lordakia: { name: 'Lordakia', sides: 3, r: 18, hp: 110, shield: 0, speed: 160, dmg: 8,  range: 300, aggro: 450, cool: 1.2, shots: 1, rewards: money(40),  color: '#c94cff' },
+    recruit:  { name: 'Recruit Streuner', sides: 4, r: 18, hp: 600,  shield: 800,  speed: 100, dmg: 40, range: 280, aggro: 380, cool: 1.4, shots: 1, rewards: { exp: 500, honor: 3, credits: 500, uridium: 2, cargo: { prometium: 12, terbium: 12 } }, maps: STREUNER_MAPS, color: '#e07a3f', flee: 0.2 },
+    aider:    { name: 'Aider Streuner',   sides: 5, r: 15, hp: 1500, shield: 1000, speed: 110, dmg: 70, range: 320, aggro: 300, cool: 2.0, shots: 1, rewards: { exp: 700, honor: 4, credits: 700, uridium: 2, cargo: { prometium: 15, terbium: 15 } }, maps: STREUNER_MAPS, color: '#6fd3a0', passive: true },
+    // Solo en los mapas X-2. Velocidad, alcance, detección, cadencia y tipo son provisionales
+    bossStreuner: { name: 'Boss Streuner', sides: 4, r: 26, hp: 3200, shield: 1600, speed: 80, dmg: 100, range: 300, aggro: 350, cool: 1.6, shots: 2, rewards: { exp: 1600, honor: 8, credits: 1600, uridium: 4, cargo: { prometium: 40, terbium: 10, endurium: 40 } }, maps: ['1-2', '2-2', '3-2'], color: '#ff6b35', passive: true },
+    // Hostil: ataca en cuanto la nave entra en su detección
+    lordakia: { name: 'Lordakia', sides: 3, r: 18, hp: 2000, shield: 2000, speed: 160, dmg: 80, range: 300, aggro: 450, cool: 1.2, shots: 1, rewards: { exp: 800, honor: 4, credits: 800, uridium: 2, cargo: { prometium: 20, terbium: 20, endurium: 20 } }, maps: LORDAKIA_MAPS, color: '#c94cff' },
+    // Hostil como el Lordakia. Velocidad, alcance, detección, cadencia, radio y disparos son provisionales
+    bossLordakia: { name: 'Boss Lordakia', sides: 3, r: 26, hp: 8000, shield: 8000, speed: 130, dmg: 320, range: 320, aggro: 450, cool: 1.2, shots: 2, rewards: { exp: 3200, honor: 16, credits: 3200, uridium: 8, cargo: { prometium: 80, terbium: 80, endurium: 80, prometid: 10, xenomita: 1 } }, maps: BOSS_LORDAKIA_MAPS, color: '#a020f0' },
     mordon:   { name: 'Mordon',   sides: 8, r: 26, hp: 260, shield: 0, speed: 70, dmg: 14, range: 420, aggro: 520, cool: 2.2, shots: 3, rewards: money(90),  color: '#ff9f1c' },
     saimon:   { name: 'Saimon',   sides: 6, r: 30, hp: 420, shield: 0, speed: 100, dmg: 18, range: 480, aggro: 600, cool: 1.8, shots: 2, rewards: money(150), color: '#2ec4b6' },
   };
@@ -75,6 +87,8 @@
   // sus ranuras de láser se crean automáticamente.
   const SHIPS = {
     PHOENIX: { name: 'Phoenix', hp: 104000, speed: 480, slots: 1, genSlots: 1, cargo: 100 },
+    // Nave de pruebas del entorno de desarrollo, no es una nave oficial
+    ADMINISTRADOR: { name: 'Administrador', hp: 500000, speed: 800, slots: 20, genSlots: 20, cargo: 5000 },
   };
   // Base de datos de láseres. Son distintos de la munición.
   const LASERS = {
@@ -153,6 +167,11 @@
     { key: 'duranium', name: 'Duranium', price: 400 },
     { key: 'promerium', name: 'Promerium', price: 1000 },
   ];
+  // Materias de refinamiento: no ocupan bodega, tienen almacenamiento ilimitado y no se venden.
+  // Sirven de materia prima para mejorar otras materias mediante el refinamiento (todavía sin implementar)
+  const REFINE_MATERIALS = [
+    { key: 'xenomita', name: 'Xenomita' },
+  ];
 
   // title: nombre destacado; description: historia de la misión (textos provisionales)
   const MISSIONS = [
@@ -181,6 +200,7 @@
       aliens: [], bullets: [], enemyShots: [], pickups: [], parts: [], texts: [],
       stars: Array.from({ length: 260 }, () => ({ x: Math.random(), y: Math.random(), z: rnd(0.2, 1) })),
       credits: 0, uridium: 0, exp: 0, honor: 0, cargo: Object.fromEntries(MATERIALS.map(m => [m.key, 0])),
+      refine: Object.fromEntries(REFINE_MATERIALS.map(m => [m.key, 0])),
       missions: [{ id: 0, progress: 0 }, { id: 1, progress: 0 }], nextMission: 2, missionSel: 0,
       banner: 0, bannerText: '', rewardT: 0, rewardLines: [], hitFlash: 0, paused: false,
       missionOpen: false, missionTab: 'summary', stationOpen: false,
@@ -857,8 +877,11 @@
       if (!p.dead && d < 22 && k.life > 0 && collect) {
         if (k.type === 'repair') p.hp = Math.min(maxHpNow(), p.hp + 25);
         else if (k.type === 'cargo') {
-          g.cargo.prometium += k.cargo.prometium;
-          g.cargo.terbium += k.cargo.terbium;
+          // Cada materia va a su almacén: las de bodega ocupan espacio, las de refinamiento no
+          for (const [key, n] of Object.entries(k.cargo)) {
+            if (key in g.cargo) g.cargo[key] += n;
+            else g.refine[key] += n;
+          }
           showBanner('Caja de carga recogida');
         }
         k.life = 0;
@@ -1796,11 +1819,22 @@
     };
   }
 
+  // Cambia de nave en el hangar: la vida y la velocidad pasan a ser las de la nueva nave (vida completa)
+  function applyShip(id) {
+    if (id === g.shipId) return;
+    const ship = SHIPS[id], p = g.p;
+    g.shipId = id;
+    p.maxHp = ship.hp; p.hp = ship.hp;
+    p.speed = ship.speed;
+    g.hangar.sel = { type: 'laser', i: 0 };
+    refreshShield();
+  }
+
   function hangarClick(x, y) {
     const L = hangarLayout();
     const hit = r => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
     if (hit(L.close)) { g.hangar.open = false; return; }
-    for (const s of L.ships) if (hit(s)) { g.shipId = s.id; g.hangar.sel = { type: 'laser', i: 0 }; refreshShield(); return; }
+    for (const s of L.ships) if (hit(s)) { applyShip(s.id); return; }
     for (const s of L.slots) if (hit(s)) { g.hangar.sel = { type: 'laser', i: s.i }; return; }
     for (const s of L.genSlots) if (hit(s)) { g.hangar.sel = { type: 'gen', i: s.i }; return; }
     for (const o of L.options) if (hit(o)) {
@@ -2279,7 +2313,7 @@
       zi: g.zi, x: p.x, y: p.y, hp: p.hp, maxHp: p.maxHp, shield: p.shield,
       damage: p.damage, speed: p.speed, ammo: p.ammo,
       up: g.up, credits: g.credits, uridium: g.uridium, exp: g.exp, honor: g.honor,
-      cargo: g.cargo, missions: g.missions, nextMission: g.nextMission, missionPos: g.missionPos,
+      cargo: g.cargo, refine: g.refine, missions: g.missions, nextMission: g.nextMission, missionPos: g.missionPos,
       playerId: g.playerId, playerPos: g.playerPos, navePos: g.navePos, teleportBonus: g.teleportBonus, lootKeys: g.lootKeys,
       shipId: g.shipId, equip: g.equip, generators: g.generators,
     };
@@ -2296,6 +2330,7 @@
     g.shipId = d.shipId; g.equip = d.equip; g.generators = d.generators;
     g.up = d.up; g.credits = d.credits; g.uridium = d.uridium; g.exp = d.exp; g.honor = d.honor;
     g.cargo = { ...g.cargo, ...d.cargo };
+    g.refine = { ...g.refine, ...d.refine };
     if (Array.isArray(d.missions)) { g.missions = d.missions; g.nextMission = d.nextMission; }
     if (d.missionPos) g.missionPos = d.missionPos;
     if (d.playerId) g.playerId = d.playerId;
