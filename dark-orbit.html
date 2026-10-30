@@ -1251,8 +1251,8 @@
       const rot = Math.atan2(p.y - a.y, p.x - a.x);
       const flash = a.hit > 0;
       drawPoly(x, y, rot, polyPts(t.sides, t.r), flash ? '#ffffff' : t.color, '#ffffff22');
-      if (a.hp < t.hp || a.aggro) bar(x - 18, y - t.r - 10, 36, 4, a.hp / t.hp, '#ff5c5c');
-      if (a.shield < t.shield) bar(x - 18, y - t.r - 15, 36, 3, a.shield / t.shield, '#5ac8ff');
+      if (a.hp < t.hp || a.aggro) bar(x - 18, y - t.r - 10, 36, 4, a.hp / t.hp, '#5dff8a');
+      if (a.shield > 0 && a.shield < t.shield) bar(x - 18, y - t.r - 15, 36, 3, a.shield / t.shield, '#5ac8ff');
       if (g.p.target === a) {
         ctx.beginPath();
         ctx.arc(x, y, t.r + 8, 0, Math.PI * 2);
