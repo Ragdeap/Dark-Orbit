@@ -27,10 +27,11 @@
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
   // ---------- Datos ----------
-  // Tamaño de los mapas: 420 x 270 unidades, con 1 unidad = 12 px. Todos los mapas usan
-  // este tamaño salvo que se indique otro en su entrada de ZONES. Los límites son duros.
-  const UNIT_PX = 12;
-  const MAP_W = 420 * UNIT_PX, MAP_H = 270 * UNIT_PX;
+  // Dos capas de coordenadas. El mundo (motor) mide 42 000 x 27 000 unidades y 1 unidad = 1 px
+  // en la vista principal. El minimapa muestra el mundo a escala 100:1 (420 x 270).
+  // Todos los mapas usan este tamaño salvo que se indique otro en su entrada de ZONES. Los límites son duros.
+  const MINI_UNIT = 100;
+  const MAP_W = 42000, MAP_H = 27000;
 
   // Facciones: MMO (Marte, mapas 1-X), EIC (Tierra, 2-X) y VRU (Venus, 3-X).
   // Los mapas 1-X y 2-X se añadirán más adelante. El planeta se atenúa (alpha)
@@ -40,9 +41,9 @@
       id: '3-1', name: '3-1 · VRU', faction: 'VRU', w: MAP_W, h: MAP_H,
       types: ['streuner', 'recruit', 'aider'],
       bgTop: '#0c2a1a', bgBottom: '#02080a',
-      base: { x: 300, y: MAP_H / 2, r: 250 },
-      station: { x: 420, y: MAP_H / 2 - 90 },
-      planet: { x: 3900, y: 900, r: 700, alpha: 1 },
+      base: { x: 2500, y: MAP_H / 2, r: 250 },
+      station: { x: 2620, y: MAP_H / 2 - 90 },
+      planet: { x: 32500, y: 7500, r: 700, alpha: 1 },
     },
   ];
 
@@ -63,7 +64,7 @@
   // Base de datos de naves. Para añadir una nave basta con añadir una entrada aquí;
   // sus ranuras de láser se crean automáticamente.
   const SHIPS = {
-    PHOENIX: { name: 'Phoenix', hp: 104000, speed: 320, slots: 1, genSlots: 1, cargo: 100 },
+    PHOENIX: { name: 'Phoenix', hp: 104000, speed: 480, slots: 1, genSlots: 1, cargo: 100 },
   };
   // Base de datos de láseres. Son distintos de la munición.
   const LASERS = {
@@ -139,7 +140,7 @@
   const MISSIONS = [
     { title: 'Cazador de Streuner', description: 'Los Streuner de esta zona llevan días atacando a los convoyes que cruzan el sector. Elimina a ocho de ellos para asegurar la ruta hacia la base.', text: 'Elimina 8 Streuner', type: 'streuner', count: 8, rewards: { credits: 200 } },
     // Misión de prueba de navegación: llegar a una coordenada (en unidades del minimapa 200 / 133)
-    { title: 'Reconocimiento', description: 'Un satélite ha detectado una señal sin identificar en la posición 200 / 133. Acude allí y confirma qué está pasando.', text: 'Viaja a la posición 200 / 133', type: 'travel', count: 1, to: { x: 2400, y: 1600 }, radius: 150, rewards: { credits: 300 } },
+    { title: 'Reconocimiento', description: 'Un satélite ha detectado una señal sin identificar en la posición 200 / 133. Acude allí y confirma qué está pasando.', text: 'Viaja a la posición 200 / 133', type: 'travel', count: 1, to: { x: 20000, y: 13300 }, radius: 150, rewards: { credits: 300 } },
     { title: 'Caza de reclutas', description: 'Los Recruit Streuner han empezado a reagruparse cerca de la frontera. Reduce su número antes de que vuelvan a atacar.', text: 'Elimina 6 Recruit Streuner', type: 'recruit', count: 6, rewards: { credits: 350 } },
     { title: 'Caza de ayudantes', description: 'Los Aider Streuner protegen a los reclutas en esta zona. Elimina a seis de ellos para despejar el camino.', text: 'Elimina 6 Aider Streuner', type: 'aider', count: 6, rewards: { credits: 350 } },
   ];
@@ -185,7 +186,7 @@
     g.zone = ZONES[i];
     g.aliens = []; g.bullets = []; g.enemyShots = []; g.pickups = []; g.parts = [];
     const p = g.p;
-    p.x = 300; p.y = g.zone.h / 2;
+    p.x = g.zone.base.x; p.y = g.zone.base.y;
     p.tx = null; p.ty = null; p.target = null; p.attacking = false;
     showBanner(g.zone.name);
   }
@@ -522,7 +523,7 @@
       if (p.respawnT <= 0) {
         p.dead = false;
         p.hp = maxHpNow();
-        p.x = 300; p.y = g.zone.h / 2; p.vx = 0; p.vy = 0;
+        p.x = g.zone.base.x; p.y = g.zone.base.y; p.vx = 0; p.vy = 0;
       }
     } else {
       updatePlayer(dt);
@@ -1645,7 +1646,7 @@
     ctx.textAlign = 'left';
     ctx.fillText(z.id, mx, my - 8);
     ctx.textAlign = 'right';
-    ctx.fillText(`${Math.floor(g.p.x / UNIT_PX)} / ${Math.floor(g.p.y / UNIT_PX)}`, mx + mw, my - 8);
+    ctx.fillText(`${Math.floor(g.p.x / MINI_UNIT)} / ${Math.floor(g.p.y / MINI_UNIT)}`, mx + mw, my - 8);
   }
 
   function drawBackground() {
