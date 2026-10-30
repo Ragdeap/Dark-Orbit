@@ -1443,6 +1443,10 @@
     ctx.lineWidth = 1.5;
     ctx.stroke();
     ctx.restore();
+    // Barras sobre la nave: la vida siempre; el escudo sólo si hay escudo equipado y le queda carga
+    const bw = 40, bx = cx - bw / 2;
+    bar(bx, cy - 30, bw, 4, p.hp / p.maxHp, '#5dff8a');
+    if (p.maxShield > 0 && p.shield > 0) bar(bx, cy - 36, bw, 3, p.shield / p.maxShield, '#5ac8ff');
     // Nombre del jugador debajo de la nave: blanco y grueso, con borde negro
     ctx.save();
     ctx.font = 'bold 15px Consolas, monospace';
