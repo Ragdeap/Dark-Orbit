@@ -1117,8 +1117,22 @@
   function drawMinimap() {
     const { mw, mh, mx, my, s, ox, oy } = minimapGeom();
     const z = g.zone;
-    ctx.fillStyle = 'rgba(5,10,25,0.8)';
+    // Fondo del mapa actual, con los mismos colores que el fondo principal
+    const bg = ctx.createLinearGradient(0, my, 0, my + mh);
+    bg.addColorStop(0, z.bgTop);
+    bg.addColorStop(1, z.bgBottom);
+    ctx.fillStyle = bg;
     ctx.fillRect(mx, my, mw, mh);
+    // El planeta se dibuja a escala, sin parallax, recortado al recuadro del minimapa
+    if (z.planet) {
+      const pl = z.planet;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(mx, my, mw, mh);
+      ctx.clip();
+      drawPlanet({ r: pl.r * s, alpha: pl.alpha }, ox + pl.x * s, oy + pl.y * s);
+      ctx.restore();
+    }
     ctx.strokeStyle = 'rgba(120,160,255,0.5)';
     ctx.strokeRect(mx + 0.5, my + 0.5, mw - 1, mh - 1);
     ctx.strokeRect(ox, oy, z.w * s, z.h * s);
@@ -1182,11 +1196,8 @@
     if (z.planet) drawPlanet(z.planet);
   }
 
-  function drawPlanet(pl) {
-    // Parallax: el planeta se mueve más despacio que la nave
-    const par = 0.25;
-    const cx = W / 2 + (pl.x - g.p.x) * par;
-    const cy = H / 2 + (pl.y - g.p.y) * par;
+  // Por defecto, el planeta de la vista principal: se mueve más despacio que la nave (parallax)
+  function drawPlanet(pl, cx = W / 2 + (pl.x - g.p.x) * 0.25, cy = H / 2 + (pl.y - g.p.y) * 0.25) {
     ctx.save();
     ctx.globalAlpha = pl.alpha;
 
