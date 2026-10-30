@@ -2055,7 +2055,7 @@
     // Izquierda arriba: solo el aviso de guardado. Casco, escudo y munición están en la ventana de nave
     if (!storageOk) {
       ctx.fillStyle = '#ff9f1a';
-      ctx.fillText('Progreso no guardado: el navegador bloquea localStorage', 16, 34);
+      ctx.fillText('Progreso no guardado: ni el servidor ni el navegador guardan la partida', 16, 34);
     }
 
     ctx.textAlign = 'left';
@@ -2627,11 +2627,11 @@
   });
 
   // ---------- Guardado ----------
-  // El progreso se guarda en el navegador (localStorage) y se restaura al abrir el juego
+  // El progreso se guarda en el servidor local (server.js). Si no hay servidor, se usa el navegador (localStorage)
   const SAVE_KEY = 'dark-orbit-save';
   const SAVE_EVERY = 5;   // segundos entre guardados automáticos
   let saveT = 0;
-  let storageOk = true;   // false si el navegador no deja usar localStorage
+  let storageOk = true;   // false si no se puede guardar ni en el servidor ni en el navegador
 
   function saveGame() {
     const p = g.p;
@@ -2643,13 +2643,20 @@
       playerId: g.playerId, playerPos: g.playerPos, navePos: g.navePos, teleportBonus: g.teleportBonus, lootKeys: g.lootKeys,
       shipId: g.shipId, equip: g.equip, generators: g.generators,
     };
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (err) { storageOk = false; }
+    const body = JSON.stringify(data);
+    fetch('/api/save', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body, keepalive: true })
+      .catch(() => { try { localStorage.setItem(SAVE_KEY, body); } catch (err) { storageOk = false; } });
+  }
+
+  // Lee el progreso del servidor; si no hay servidor (juego abierto como archivo), del navegador
+  function readSave() {
+    return fetch('/api/save').then(r => (r.ok ? r.json() : null)).catch(() => {
+      try { return JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (err) { return null; }
+    });
   }
 
   // Devuelve false si no hay progreso guardado válido; entonces se empieza de cero
-  function loadGame() {
-    let d;
-    try { d = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (err) { storageOk = false; return false; }
+  function loadGame(d) {
     if (!d || !ZONES[d.zi] || !SHIPS[d.shipId]) return false;
     g = newState();
     g.zi = d.zi; g.zone = ZONES[d.zi];
@@ -2690,9 +2697,12 @@
     requestAnimationFrame(frame);
   }
 
-  if (!loadGame()) reset();
-  addEventListener('pagehide', saveGame);
-  requestAnimationFrame(frame);
+  // El bucle no arranca hasta tener el progreso cargado
+  readSave().then(d => {
+    if (!loadGame(d)) reset();
+    addEventListener('pagehide', saveGame);
+    requestAnimationFrame(frame);
+  });
 })();
 </script>
 </body>
