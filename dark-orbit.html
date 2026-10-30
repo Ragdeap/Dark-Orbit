@@ -147,7 +147,7 @@
       stars: Array.from({ length: 260 }, () => ({ x: Math.random(), y: Math.random(), z: rnd(0.2, 1) })),
       credits: 0, uridium: 0, exp: 0, honor: 0, cargo: { prometium: 0, terbium: 0 },
       mission: 0, kills: {},
-      banner: 0, bannerText: '', hitFlash: 0, paused: false,
+      banner: 0, bannerText: '', rewardT: 0, rewardLines: [], hitFlash: 0, paused: false,
       safeT: 0, wasSafe: false,
       shipId: 'PHOENIX',
       equip: { PHOENIX: ['LF1'] },
@@ -249,6 +249,11 @@
     g.uridium += r.uridium;
     g.exp += r.exp;
     g.honor += r.honor;
+    // Texto con las recompensas de esta baja (se omiten las que valen 0)
+    g.rewardLines = [
+      [r.credits, 'créditos'], [r.uridium, 'uridium'], [r.honor, 'puntos de honor'], [r.exp, 'puntos de experiencia'],
+    ].filter(([n]) => n > 0).map(([n, what]) => `Has recibido ${n} ${what}`);
+    g.rewardT = 3;
     if (r.cargo) g.pickups.push({ x: a.x, y: a.y, type: 'cargo', cargo: r.cargo, life: 60 });
     g.kills[a.type] = (g.kills[a.type] || 0) + 1;
     if (Math.random() < 0.10) g.pickups.push({ x: a.x, y: a.y, type: 'repair', life: 20 });
@@ -489,6 +494,7 @@
     g.safeT = Math.max(0, g.safeT - dt);
 
     if (g.banner > 0) g.banner -= dt;
+    if (g.rewardT > 0) g.rewardT -= dt;
     g.hitFlash = Math.max(0, g.hitFlash - dt);
   }
 
@@ -621,8 +627,10 @@
     for (const k of g.pickups) {
       k.life -= dt;
       const d = dist(k.x, k.y, p.x, p.y);
-      if (!p.dead && d < 120) { k.x += (p.x - k.x) * 4 * dt; k.y += (p.y - k.y) * 4 * dt; }
-      if (!p.dead && d < 22 && k.life > 0) {
+      if (k.type !== 'cargo' && !p.dead && d < 120) { k.x += (p.x - k.x) * 4 * dt; k.y += (p.y - k.y) * 4 * dt; }
+      // Las cajas de carga solo se recogen si se ha hecho clic sobre ellas (k.want)
+      const collect = k.type !== 'cargo' || k.want;
+      if (!p.dead && d < 22 && k.life > 0 && collect) {
         if (k.type === 'repair') p.hp = Math.min(maxHpNow(), p.hp + 25);
         else if (k.type === 'cargo') {
           g.cargo.prometium += k.cargo.prometium;
@@ -917,12 +925,6 @@
     });
     ctx.textAlign = 'left';
 
-    // Arriba centro: ayuda
-    ctx.fillStyle = '#5f6e84';
-    ctx.textAlign = 'center';
-    ctx.fillText('Clic en suelo: mover   Clic en NPC: seleccionar   Doble clic o Ctrl: atacar / parar ataque', W / 2, 24);
-    ctx.fillText('1-0: munición   F1-F3: mejoras   P/Esc: pausa', W / 2, 40);
-    ctx.textAlign = 'left';
   }
 
   // ---------- Hangar ----------
@@ -1260,6 +1262,13 @@
     drawSafeMsg();
     drawMinimap();
     if (g.banner > 0) drawCenter(g.bannerText, '#9fe3ff', 26, 1, H * 0.25);
+    // Recompensas de la última baja: entran con un deslizamiento suave y se ocultan poco a poco en el último segundo
+    if (g.rewardT > 0) {
+      const inT = Math.min(1, (3 - g.rewardT) / 0.3);
+      const alpha = inT * Math.min(1, g.rewardT / 0.6);
+      const slide = (1 - inT) * -10;
+      g.rewardLines.forEach((line, i) => drawCenter(line, '#ffffff', 18, alpha, 18 + slide + i * 22));
+    }
     if (g.paused) {
       drawCenter('PAUSA', '#ffffff', 36, 1, H / 2);
       drawCenter('P / Esc para continuar', '#9fb3c8', 16, 0.9, H / 2 + 40);
@@ -1290,6 +1299,9 @@
     }
     const wx = e.clientX - W / 2 + g.p.x;
     const wy = e.clientY - H / 2 + g.p.y;
+    // Clic sobre una caja de carga: la nave viaja hasta ella y la recoge al llegar
+    const box = e.button === 0 ? g.pickups.find(k => k.type === 'cargo' && dist(k.x, k.y, wx, wy) < 18) : null;
+    if (box) { box.want = true; g.p.tx = box.x; g.p.ty = box.y; return; }
     const a = e.button === 0 ? nearestAlien(wx, wy, 40) : null;
     if (a) {
       if (e.detail >= 2) startAttack(a);        // doble clic: inicia el ataque

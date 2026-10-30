@@ -29,7 +29,7 @@ Las recompensas son fijas y se otorgan al destruir al NPC.
 | Mordon | — | — | 90 (provisional) | — | — |
 | Saimon | — | — | 150 (provisional) | — | — |
 
-- **Caja de carga:** aparece en el lugar donde murió el NPC. Hay que recogerla acercándose a ella; entonces suma sus 10 Prometium y 10 Terbium al inventario.
+- **Caja de carga:** aparece en el lugar donde murió el NPC y desaparece si no se recoge. Hay que hacer clic sobre ella: la nave viaja hasta la caja y la recoge al llegar, sumando sus 10 Prometium y 10 Terbium al inventario.
 - Los datos de Recruit, Aider, Lordakia, Mordon y Saimon son provisionales y tienen que confirmarse.
 
 ## Estadísticas completas
