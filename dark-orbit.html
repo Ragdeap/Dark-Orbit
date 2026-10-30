@@ -924,7 +924,10 @@
 
   function missionPanelGeom() {
     if (!g.missionOpen) return { x: W - 52, y: 16, w: 36, h: 36 };
-    const w = 300, h = 190, x = W - w - 16, y = 16;
+    const w = 300, h = 190;
+    // Por defecto arriba a la derecha; si se ha arrastrado, se queda en la posición elegida (dentro de la pantalla)
+    const pos = g.missionPos || { x: W - w - 16, y: 16 };
+    const x = clamp(pos.x, 0, W - w), y = clamp(pos.y, 0, H - h);
     // Bolas de misiones junto a la X, alineadas a la derecha; una por misión aceptada
     const n = g.missions.length;
     return {
@@ -1474,6 +1477,8 @@
         // Slot de misión: selecciona esa misión y vuelve a la pestaña Resumen
         const s = mp.slots.findIndex(inRect);
         if (s >= 0 && s < g.missions.length) { g.missionSel = s; g.missionTab = 'summary'; }
+        // Barra superior: arrastra la ventana
+        else if (e.clientY < mp.y + 30) g.drag = { dx: e.clientX - mp.x, dy: e.clientY - mp.y };
       }
       return;
     }
@@ -1506,7 +1511,13 @@
     mouse.downAt = performance.now();
   });
 
+  // Arrastre de la ventana de misiones: sigue al cursor hasta soltar el botón
+  addEventListener('mousemove', e => {
+    if (g.drag) g.missionPos = { x: e.clientX - g.drag.dx, y: e.clientY - g.drag.dy };
+  });
+
   addEventListener('mouseup', () => {
+    g.drag = null;
     if (!mouse.holding) return;
     mouse.holding = false;
     // Un clic corto es un destino; si se mantuvo pulsado, la nave se detiene al soltar
@@ -1574,7 +1585,7 @@
       zi: g.zi, x: p.x, y: p.y, hp: p.hp, maxHp: p.maxHp, shield: p.shield,
       damage: p.damage, speed: p.speed, ammo: p.ammo,
       up: g.up, credits: g.credits, uridium: g.uridium, exp: g.exp, honor: g.honor,
-      cargo: g.cargo, missions: g.missions, nextMission: g.nextMission,
+      cargo: g.cargo, missions: g.missions, nextMission: g.nextMission, missionPos: g.missionPos,
       shipId: g.shipId, equip: g.equip, generators: g.generators,
     };
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (err) { storageOk = false; }
@@ -1591,6 +1602,7 @@
     g.up = d.up; g.credits = d.credits; g.uridium = d.uridium; g.exp = d.exp; g.honor = d.honor;
     g.cargo = d.cargo;
     if (Array.isArray(d.missions)) { g.missions = d.missions; g.nextMission = d.nextMission; }
+    if (d.missionPos) g.missionPos = d.missionPos;
     const p = g.p;
     p.x = d.x; p.y = d.y; p.maxHp = d.maxHp; p.hp = d.hp > 0 ? d.hp : d.maxHp;
     p.damage = d.damage; p.speed = d.speed;
