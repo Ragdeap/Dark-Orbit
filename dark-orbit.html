@@ -41,6 +41,7 @@
       types: ['streuner', 'recruit', 'aider'],
       bgTop: '#0c2a1a', bgBottom: '#02080a',
       base: { x: 300, y: MAP_H / 2, r: 250 },
+      station: { x: 420, y: MAP_H / 2 - 90 },
       planet: { x: 3900, y: 900, r: 700, alpha: 1 },
     },
   ];
@@ -124,6 +125,16 @@
 
   // Misiones en orden: cada una pide matar cierta cantidad de un tipo de NPC.
   // rewards: solo las que da la misión; las que no existen no se muestran
+  // Materias primas en el orden de la base de datos; price: precio de venta por unidad (créditos)
+  const MATERIALS = [
+    { key: 'prometium', name: 'Prometium', price: 20 },
+    { key: 'endurium', name: 'Endurium', price: 30 },
+    { key: 'terbium', name: 'Terbium', price: 50 },
+    { key: 'prometid', name: 'Prometid', price: 400 },
+    { key: 'duranium', name: 'Duranium', price: 400 },
+    { key: 'promerium', name: 'Promerium', price: 1000 },
+  ];
+
   // title: nombre destacado; description: historia de la misión (textos provisionales)
   const MISSIONS = [
     { title: 'Cazador de Streuner', description: 'Los Streuner de esta zona llevan días atacando a los convoyes que cruzan el sector. Elimina a ocho de ellos para asegurar la ruta hacia la base.', text: 'Elimina 8 Streuner', type: 'streuner', count: 8, rewards: { credits: 200 } },
@@ -150,10 +161,10 @@
       zi: 0, zone: ZONES[0],
       aliens: [], bullets: [], enemyShots: [], pickups: [], parts: [], texts: [],
       stars: Array.from({ length: 260 }, () => ({ x: Math.random(), y: Math.random(), z: rnd(0.2, 1) })),
-      credits: 0, uridium: 0, exp: 0, honor: 0, cargo: { prometium: 0, terbium: 0 },
+      credits: 0, uridium: 0, exp: 0, honor: 0, cargo: Object.fromEntries(MATERIALS.map(m => [m.key, 0])),
       missions: [{ id: 0, progress: 0 }, { id: 1, progress: 0 }], nextMission: 2, missionSel: 0,
       banner: 0, bannerText: '', rewardT: 0, rewardLines: [], hitFlash: 0, paused: false,
-      missionOpen: false, missionTab: 'summary',
+      missionOpen: false, missionTab: 'summary', stationOpen: false,
       safeT: 0, wasSafe: false,
       shipId: 'PHOENIX',
       equip: { PHOENIX: ['LF1'] },
@@ -916,6 +927,101 @@
     ctx.restore();
   }
 
+  // ---------- Estación de venta ----------
+  const STATION_RANGE = 110;   // distancia máxima a la estación para abrir la venta
+  const STATION_CLICK = 40;    // radio del clic sobre la estación
+
+  const inBox = (r, px, py) => px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
+
+  function stationNear() {
+    const st = g.zone.station;
+    return !!st && dist(g.p.x, g.p.y, st.x, st.y) < STATION_RANGE;
+  }
+
+  function sellMaterial(m) {
+    const qty = g.cargo[m.key];
+    if (!qty) return;
+    const total = qty * m.price;
+    g.credits += total;
+    g.cargo[m.key] = 0;
+    showBanner(`Vendido: ${qty} ${m.name} por ${total} créditos`);
+  }
+
+  function stationGeom() {
+    const w = 360, h = 210, x = Math.round((W - w) / 2), y = Math.round((H - h) / 2);
+    return {
+      x, y, w, h,
+      close: { x: x + w - 26, y: y + 6, w: 20, h: 20 },
+      rows: MATERIALS.map((m, i) => ({ m, btn: { x: x + 276, y: y + 60 + i * 24, w: 70, h: 18 } })),
+    };
+  }
+
+  function drawStation() {
+    const st = g.zone.station;
+    if (!st) return;
+    const x = sx(st.x), y = sy(st.y);
+    ctx.save();
+    ctx.fillStyle = 'rgba(90,209,255,0.15)';
+    ctx.fillRect(x - 18, y - 18, 36, 36);
+    ctx.strokeStyle = '#5ad1ff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x - 18, y - 18, 36, 36);
+    ctx.fillStyle = '#5ad1ff';
+    ctx.font = '12px Consolas, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText('VENTA', x, y - 26);
+    if (stationNear() && !g.stationOpen) ctx.fillText('Clic para vender', x, y + 36);
+    ctx.restore();
+  }
+
+  function drawStationWindow() {
+    if (!g.stationOpen) return;
+    const b = stationGeom();
+    ctx.save();
+    ctx.fillStyle = '#0b1424';
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeStyle = '#5ad1ff';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
+    ctx.font = '13px Consolas, monospace';
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#5ad1ff';
+    ctx.fillText('ESTACIÓN DE VENTA', b.x + 12, b.y + 22);
+    ctx.fillStyle = '#5f6e84';
+    ctx.fillRect(b.x + 8, b.y + 30, b.w - 16, 1);
+    ctx.fillText('Materia', b.x + 14, b.y + 50);
+    ctx.textAlign = 'right';
+    ctx.fillText('Cant.', b.x + 160, b.y + 50);
+    ctx.fillText('Precio', b.x + 262, b.y + 50);
+    // Botón de cerrar
+    const c = b.close;
+    ctx.strokeStyle = '#cfe8ff';
+    ctx.beginPath();
+    ctx.moveTo(c.x + 5, c.y + 5); ctx.lineTo(c.x + c.w - 5, c.y + c.h - 5);
+    ctx.moveTo(c.x + c.w - 5, c.y + 5); ctx.lineTo(c.x + 5, c.y + c.h - 5);
+    ctx.stroke();
+    // Una fila por materia: nombre, cantidad en bodega, precio por unidad y botón de venta
+    for (const { m, btn } of b.rows) {
+      const ty = btn.y + 13;
+      ctx.textAlign = 'left';
+      ctx.fillStyle = g.cargo[m.key] ? '#cfe8ff' : '#5f6e84';
+      ctx.fillText(m.name, b.x + 14, ty);
+      ctx.textAlign = 'right';
+      ctx.fillText(`${g.cargo[m.key]} ud`, b.x + 160, ty);
+      ctx.fillText(`${m.price} cr/ud`, b.x + 262, ty);
+      ctx.fillStyle = '#1b2a44';
+      ctx.fillRect(btn.x, btn.y, btn.w, btn.h);
+      ctx.strokeStyle = '#5ad1ff';
+      ctx.strokeRect(btn.x + 0.5, btn.y + 0.5, btn.w - 1, btn.h - 1);
+      ctx.fillStyle = '#5ad1ff';
+      ctx.textAlign = 'center';
+      ctx.fillText('Vender', btn.x + btn.w / 2, ty);
+    }
+    ctx.restore();
+  }
+
   // Ventana de misiones y mejoras: minimizada es un cuadrado arriba a la derecha; abierta, un panel de fondo sólido
   const MAX_MISSIONS = 5;   // misiones aceptadas a la vez
   function canAcceptMission() {
@@ -1084,9 +1190,7 @@
     ctx.font = '13px Consolas, monospace';
     ctx.textBaseline = 'alphabetic';
 
-    // Izquierda arriba: zona, casco, créditos, munición
-    ctx.fillStyle = '#9fe3ff';
-    ctx.fillText(g.zone.name, 16, 24);
+    // Izquierda arriba: casco, créditos, munición
     bar(16, 34, 220, 12, p.hp / maxHpNow(), '#ff5c5c');
     bar(16, 52, 220, 8, p.maxShield ? p.shield / p.maxShield : 0, '#5ac8ff');
     ctx.fillStyle = '#cfe8ff';
@@ -1421,6 +1525,7 @@
     drawBackground();
     drawStars();
     drawWorldBackground();
+    drawStation();
     drawPickups();
     drawAliens();
     drawProjectiles();
@@ -1437,6 +1542,7 @@
 
     drawHUD();
     drawMissionPanel();
+    drawStationWindow();
     drawActionBar();
     drawSafeMsg();
     drawMinimap();
@@ -1482,6 +1588,14 @@
       }
       return;
     }
+    // Ventana de venta: la X la cierra y cada "Vender" vende esa materia; un clic dentro no mueve la nave
+    if (g.stationOpen) {
+      const sb = stationGeom();
+      if (inBox(sb.close, e.clientX, e.clientY)) { g.stationOpen = false; return; }
+      const row = sb.rows.find(r => inBox(r.btn, e.clientX, e.clientY));
+      if (row) sellMaterial(row.m);
+      if (inBox(sb, e.clientX, e.clientY)) return;
+    }
     if (g.paused || g.p.dead) return;
     const slot = barSlotAt(e.clientX, e.clientY);
     if (slot >= 0) { useSlot(slot); return; }
@@ -1496,6 +1610,13 @@
     }
     const wx = e.clientX - W / 2 + g.p.x;
     const wy = e.clientY - H / 2 + g.p.y;
+    // Clic sobre la estación de venta: si la nave está cerca, abre la venta; si no, la nave se acerca
+    const st = g.zone.station;
+    if (e.button === 0 && st && dist(wx, wy, st.x, st.y) < STATION_CLICK) {
+      if (stationNear()) g.stationOpen = true;
+      else { g.p.tx = st.x; g.p.ty = st.y; }
+      return;
+    }
     // Clic sobre una caja de carga: la nave viaja hasta ella y la recoge al llegar
     const box = e.button === 0 ? g.pickups.find(k => k.type === 'cargo' && dist(k.x, k.y, wx, wy) < 18) : null;
     if (box) { box.want = true; g.p.tx = box.x; g.p.ty = box.y; return; }
@@ -1600,7 +1721,7 @@
     g.zi = d.zi; g.zone = ZONES[d.zi];
     g.shipId = d.shipId; g.equip = d.equip; g.generators = d.generators;
     g.up = d.up; g.credits = d.credits; g.uridium = d.uridium; g.exp = d.exp; g.honor = d.honor;
-    g.cargo = d.cargo;
+    g.cargo = { ...g.cargo, ...d.cargo };
     if (Array.isArray(d.missions)) { g.missions = d.missions; g.nextMission = d.nextMission; }
     if (d.missionPos) g.missionPos = d.missionPos;
     const p = g.p;
@@ -1618,7 +1739,11 @@
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
-    if (!g.paused && !g.hangar.open) { update(dt); checkTravel(); }
+    if (!g.paused && !g.hangar.open) {
+      update(dt);
+      checkTravel();
+      if (!stationNear()) g.stationOpen = false;   // al alejarse, la venta se cierra
+    }
     draw();
     saveT += dt;
     if (saveT >= SAVE_EVERY) { saveT = 0; saveGame(); }
