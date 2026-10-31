@@ -62,7 +62,7 @@
     {
       id: '3-1', name: '3-1 · VRU', faction: 'VRU', w: MAP_W, h: MAP_H,
       bgTop: '#0c2a1a', bgBottom: '#02080a',
-      base: { x: 23400, y: 13867, r: 250 },
+      base: { x: 23400, y: 13867, r: 1440 },
       station: { x: 23472, y: 13816 },
       planet: { x: 19500, y: 4333, r: 700, alpha: 1 },
       portals: [{ x: PORTAL_INSET.x, y: PORTAL_INSET.y, to: '3-2' }],
@@ -373,13 +373,6 @@
     showBanner(g.zone.name);
   }
 
-  // Zona segura: la base y la zona alrededor del portal (su radio es mayor que el de cambio de mapa)
-  function inSafeZone() {
-    const p = g.p, z = g.zone;
-    if (z.base && dist(p.x, p.y, z.base.x, z.base.y) < z.base.r) return true;
-    return inNaz();
-  }
-
   function showBanner(text) {
     g.banner = 2.5;
     g.bannerText = text;
@@ -557,7 +550,7 @@
       x = rnd(200, z.w - 200);
       y = rnd(200, z.h - 200);
       tries++;
-    } while (z.base && dist(x, y, z.base.x, z.base.y) < SPAWN_SAFE && tries < 20);
+    } while (z.base && dist(x, y, z.base.x, z.base.y) < Math.max(SPAWN_SAFE, z.base.r) && tries < 20);
     const t = ALIEN[type];
     g.aliens.push({
       type, x, y, home: { x, y }, vx: 0, vy: 0,
@@ -1002,8 +995,8 @@
     updateBarFade(dt);
     updateTexts(dt);
 
-    // Aviso al entrar en una zona segura; se desvanece tras unos segundos
-    const safe = inSafeZone();
+    // Aviso al entrar en zona de no ataque efectiva (no mientras dure un combate); se desvanece tras unos segundos
+    const safe = nazProtected();
     if (safe && !g.wasSafe) g.safeT = 3;
     g.wasSafe = safe;
     g.safeT = Math.max(0, g.safeT - dt);
@@ -1012,6 +1005,16 @@
     if (g.rewardT > 0) g.rewardT -= dt;
     g.hitFlash = Math.max(0, g.hitFlash - dt);
     g.clock += dt;
+  }
+
+  // Radio de la base de una zona: solo entra la empresa dueña (su facción). NPC y naves ajenas quedan fuera del círculo
+  function pushOutOfBase(o, company, z) {
+    if (!z.base || company === z.faction) return;
+    const dx = o.x - z.base.x, dy = o.y - z.base.y, d = Math.hypot(dx, dy);
+    if (d >= z.base.r) return;
+    const ux = d ? dx / d : 1, uy = d ? dy / d : 0;
+    o.x = z.base.x + ux * z.base.r;
+    o.y = z.base.y + uy * z.base.r;
   }
 
   function updatePlayer(dt) {
@@ -1038,6 +1041,7 @@
     p.vy += (wy - p.vy) * k;
     p.x = clamp(p.x + p.vx * dt, 0, z.w);
     p.y = clamp(p.y + p.vy * dt, 0, z.h);
+    pushOutOfBase(p, p.company, z);
 
     if (p.attacking) p.angle = Math.atan2(p.target.y - p.y, p.target.x - p.x);
     else if (Math.hypot(p.vx, p.vy) > 5) p.angle = Math.atan2(p.vy, p.vx);
@@ -1207,6 +1211,7 @@
       a.vy += (wy - a.vy) * k;
       a.x = clamp(a.x + a.vx * dt, 20, z.w - 20);
       a.y = clamp(a.y + a.vy * dt, 20, z.h - 20);
+      pushOutOfBase(a, null, z);
       a.hit = Math.max(0, a.hit - dt);
     }
     g.aliens = g.aliens.filter(a => a.hp > 0);
@@ -1233,6 +1238,7 @@
       }
       if (b.zi === g.zi) {
         updateBotActive(b, dt);
+        pushOutOfBase(b, b.company, g.zone);
       } else if (!b.enemy) {
         b.hopT -= dt;
         if (b.hopT <= 0) crossBotPortal(b);
@@ -1241,8 +1247,9 @@
   }
 
   function updateBotActive(b, dt) {
-    // Si la nave le ha atacado, le devuelve el ataque como a un jugador hostil, sin atender a los NPC
-    if (b.hostile && !g.p.dead) {
+    // Si la nave le ha atacado, le devuelve el ataque como a un jugador hostil, sin atender a los NPC.
+    // Dentro de la zona de no ataque la nave no es objetivo, igual que para los NPC
+    if (b.hostile && targetable(g.p)) {
       const d = dist(b.x, b.y, g.p.x, g.p.y);
       b.angle = Math.atan2(g.p.y - b.y, g.p.x - b.x);
       if (d > BOT_RANGE * 0.7) botMoveTo(b, g.p.x, g.p.y, dt);
