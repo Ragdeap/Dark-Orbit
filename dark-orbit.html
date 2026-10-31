@@ -209,9 +209,11 @@
   // Base de datos de naves. Para añadir una nave basta con añadir una entrada aquí;
   // sus ranuras de láser se crean automáticamente.
   const SHIPS = {
-    PHOENIX: { name: 'Phoenix', hp: 104000, speed: 320, slots: 1, genSlots: 1, cargo: 100 },
-    LIBERATOR: { name: 'Liberator', hp: 116000, speed: 300, slots: 4, genSlots: 6, cargo: 400 },
+    PHOENIX: { name: 'Phoenix', hp: 104000, speed: 320, slots: 1, missSlots: 1, genSlots: 1, extraSlots: 1, cargo: 100 },
+    LIBERATOR: { name: 'Liberator', hp: 116000, speed: 300, slots: 4, missSlots: 1, genSlots: 6, extraSlots: 2, cargo: 400 },
   };
+  // Extras de la nave. Catálogo vacío de momento: se añadirán cuando se definan
+  const EXTRAS = {};
   // Base de datos de láseres. Son distintos de la munición.
   const LASERS = {
     LF1: { name: 'LF-1', damage: 65 },
@@ -364,7 +366,9 @@
       shipId: 'PHOENIX',
       equip: { PHOENIX: ['LF1'] },
       generators: {},
-      inv: { lasers: { LF1: 1 }, generators: {}, ships: { PHOENIX: 1 } },
+      missiles: {},
+      extras: {},
+      inv: { lasers: { LF1: 1 }, generators: {}, missiles: {}, extras: {}, ships: { PHOENIX: 1 } },
       hangar: { open: false, sel: { type: 'laser', i: 0 } },
       allies: BOTS.map((b, i) => ({
         id: i, name: b.name, zi: ZONES.findIndex(z => z.id === b.zone), exp: 0, honor: 0,
@@ -819,6 +823,21 @@
     warnTimer = null;
   }
 
+  // Lanzamisiles de una nave. Mismo criterio que las ranuras de láser y de generadores.
+  function missileOf(id = g.shipId) {
+    if (!g.missiles[id]) g.missiles[id] = Array(SHIPS[id].missSlots).fill(null);
+    return g.missiles[id];
+  }
+
+  // Array de piezas equipadas de la nave actual según el tipo de ranura: láser, lanzamisiles o generador
+  function slotArr(type) { return ({ gen: genOf, miss: missileOf, extra: extraOf }[type] || equipOf)(); }
+
+  // Extras de una nave. Mismo criterio que el resto de ranuras.
+  function extraOf(id = g.shipId) {
+    if (!g.extras[id]) g.extras[id] = Array(SHIPS[id].extraSlots).fill(null);
+    return g.extras[id];
+  }
+
   // Generadores de una nave. Mismo criterio que las ranuras de láser.
   function genOf(id = g.shipId) {
     if (!g.generators[id]) g.generators[id] = Array(SHIPS[id].genSlots).fill(null);
@@ -852,11 +871,11 @@
   }
 
   // Almacén del jugador: cuántas unidades tiene de cada pieza, estén equipadas o no
-  const invOf = kind => g.inv[kind === 'gen' ? 'generators' : 'lasers'];
+  const invOf = kind => g.inv[{ gen: 'generators', miss: 'missiles', extra: 'extras' }[kind] || 'lasers'];
 
   // Unidades de una pieza que están equipadas en alguna nave
   function inUse(kind, id) {
-    const all = kind === 'gen' ? g.generators : g.equip;
+    const all = { gen: g.generators, miss: g.missiles, extra: g.extras }[kind] || g.equip;
     return Object.values(all).reduce((s, arr) => s + arr.filter(x => x === id).length, 0);
   }
 
@@ -866,11 +885,13 @@
   }
 
   // Partidas anteriores al almacén: lo que ya estaba equipado, y la nave activa, pasan a ser del jugador
-  function inventoryFrom(equip, generators, shipId) {
-    const inv = { lasers: {}, generators: {}, ships: {} };
+  function inventoryFrom(equip, generators, shipId, missiles = {}, extras = {}) {
+    const inv = { lasers: {}, generators: {}, missiles: {}, extras: {}, ships: {} };
     for (const id of [shipId, ...Object.keys(equip).filter(id => equip[id].some(Boolean))]) inv.ships[id] = 1;
     for (const arr of Object.values(equip)) for (const id of arr) if (id) inv.lasers[id] = (inv.lasers[id] || 0) + 1;
     for (const arr of Object.values(generators)) for (const id of arr) if (id) inv.generators[id] = (inv.generators[id] || 0) + 1;
+    for (const arr of Object.values(missiles)) for (const id of arr) if (id) inv.missiles[id] = (inv.missiles[id] || 0) + 1;
+    for (const arr of Object.values(extras)) for (const id of arr) if (id) inv.extras[id] = (inv.extras[id] || 0) + 1;
     return inv;
   }
 
@@ -3047,30 +3068,37 @@
     const shipIds = Object.keys(SHIPS).filter(id => g.inv.ships[id]);
     // Solo se ofrecen las piezas que tiene el jugador; null = ranura vacía
     const laserOpts = [null, ...Object.keys(LASERS).filter(id => invOf('laser')[id] > 0)];
+    const missOpts = [null, ...Object.keys(MISSILES).filter(id => invOf('miss')[id] > 0)];
     const genOpts = [null, ...Object.keys(GENERATORS).filter(id => invOf('gen')[id] > 0)];
+    const extraOpts = [null, ...Object.keys(EXTRAS).filter(id => invOf('extra')[id] > 0)];
     const ship = SHIPS[g.shipId];
     const shipRows = Math.ceil(shipIds.length / 4);
-    const optRows = Math.ceil(Math.max(laserOpts.length, genOpts.length) / 4);
-    const n = ship.slots, gn = ship.genSlots;
+    const optRows = Math.ceil(Math.max(laserOpts.length, missOpts.length, genOpts.length, extraOpts.length) / 4);
+    const n = ship.slots, mn = ship.missSlots, gn = ship.genSlots, en = ship.extraSlots;
     const slotW = Math.min(70, (pw - 40 - (n - 1) * 8) / n);
+    // Orden de secciones: láseres, lanzamisiles, generadores, extras y, debajo, las opciones de la ranura seleccionada
     const slotLabel = 50 + shipRows * 32 + 12;   // posiciones relativas al panel
     const slotY = slotLabel + 8;
-    const genLabel = slotY + 70 + 22;
+    const missLabel = slotY + 70 + 22;
+    const missY = missLabel + 8;
+    const genLabel = missY + 70 + 22;
     const genY = genLabel + 8;
-    const optLabel = genY + 70 + 22;
+    const extraLabel = genY + 70 + 22;
+    const extraY = extraLabel + 8;
+    const optLabel = extraY + 70 + 22;
     const optY = optLabel + 12;
     const ph = optY + optRows * 50 + 30;
     const px = W / 2 - pw / 2, py = H / 2 - ph / 2;
     const optType = g.hangar.sel.type;
     const ships = shipIds.map((id, i) => ({ id, x: px + 20 + (i % 4) * 150, y: py + 50 + Math.floor(i / 4) * 32, w: 140, h: 28 }));
-    const slots = Array.from({ length: n }, (_, i) => ({ i, x: px + 20 + i * (slotW + 8), y: py + slotY, w: slotW, h: 70 }));
-    const genSlots = Array.from({ length: gn }, (_, i) => ({ i, x: px + 20 + i * (slotW + 8), y: py + genY, w: slotW, h: 70 }));
-    const options = (optType === 'gen' ? genOpts : laserOpts)
-      .map((id, i) => ({ id, x: px + 20 + (i % 4) * 150, y: py + optY + Math.floor(i / 4) * 50, w: 140, h: 40 }));
+    const row = (count, y) => Array.from({ length: count }, (_, i) => ({ i, x: px + 20 + i * (slotW + 8), y: py + y, w: slotW, h: 70 }));
+    const slots = row(n, slotY), missSlots = row(mn, missY), genSlots = row(gn, genY), extraSlots = row(en, extraY);
+    const opts = { laser: laserOpts, miss: missOpts, gen: genOpts, extra: extraOpts }[optType];
+    const options = opts.map((id, i) => ({ id, x: px + 20 + (i % 4) * 150, y: py + optY + Math.floor(i / 4) * 50, w: 140, h: 40 }));
     const close = { x: px + pw - 34, y: py + 10, w: 24, h: 24 };
     return {
-      px, py, pw, ph, ships, slots, genSlots, options, close, optType,
-      slotLabelY: py + slotLabel, genLabelY: py + genLabel, optLabelY: py + optLabel, instrY: py + ph - 16,
+      px, py, pw, ph, ships, slots, missSlots, genSlots, extraSlots, options, close, optType,
+      slotLabelY: py + slotLabel, missLabelY: py + missLabel, genLabelY: py + genLabel, extraLabelY: py + extraLabel, optLabelY: py + optLabel, instrY: py + ph - 16,
     };
   }
 
@@ -3091,13 +3119,14 @@
     if (hit(L.close)) { g.hangar.open = false; return; }
     for (const s of L.ships) if (hit(s)) { applyShip(s.id); return; }
     for (const s of L.slots) if (hit(s)) { g.hangar.sel = { type: 'laser', i: s.i }; return; }
+    for (const s of L.missSlots) if (hit(s)) { g.hangar.sel = { type: 'miss', i: s.i }; return; }
     for (const s of L.genSlots) if (hit(s)) { g.hangar.sel = { type: 'gen', i: s.i }; return; }
+    for (const s of L.extraSlots) if (hit(s)) { g.hangar.sel = { type: 'extra', i: s.i }; return; }
     for (const o of L.options) if (hit(o)) {
-      const cur = L.optType === 'gen' ? genOf()[g.hangar.sel.i] : equipOf()[g.hangar.sel.i];
+      const arr = slotArr(L.optType), cur = arr[g.hangar.sel.i];
       // Sin unidades libres en el almacén no se puede equipar
       if (o.id && freeOf(L.optType, o.id, cur) <= 0) return;
-      if (L.optType === 'gen') genOf()[g.hangar.sel.i] = o.id;
-      else equipOf()[g.hangar.sel.i] = o.id;
+      arr[g.hangar.sel.i] = o.id;
       refreshShield();
       return;
     }
@@ -3140,10 +3169,21 @@
     const sel = g.hangar.sel;
     ctx.fillStyle = '#9fb3c8';
     ctx.font = '12px Consolas, monospace';
-    ctx.fillText('Ranuras de láser', L.px + 20, L.slotLabelY);
+    ctx.fillText('Láseres', L.px + 20, L.slotLabelY);
     for (const s of L.slots) {
       const id = equipOf()[s.i];
       hangarButton(s.x, s.y, s.w, s.h, id ? LASERS[id].name : '—', sel.type === 'laser' && s.i === sel.i);
+      ctx.fillStyle = '#5f6e84';
+      ctx.font = '11px Consolas, monospace';
+      ctx.fillText(String(s.i + 1), s.x + 5, s.y + 13);
+    }
+
+    ctx.fillStyle = '#9fb3c8';
+    ctx.font = '12px Consolas, monospace';
+    ctx.fillText('Lanzamisiles', L.px + 20, L.missLabelY);
+    for (const s of L.missSlots) {
+      const id = missileOf()[s.i];
+      hangarButton(s.x, s.y, s.w, s.h, id ? MISSILES[id].name : '—', sel.type === 'miss' && s.i === sel.i);
       ctx.fillStyle = '#5f6e84';
       ctx.font = '11px Consolas, monospace';
       ctx.fillText(String(s.i + 1), s.x + 5, s.y + 13);
@@ -3162,14 +3202,26 @@
 
     ctx.fillStyle = '#9fb3c8';
     ctx.font = '12px Consolas, monospace';
-    ctx.fillText(L.optType === 'gen' ? 'Generadores disponibles' : 'Láseres disponibles', L.px + 20, L.optLabelY);
+    ctx.fillText('Extras', L.px + 20, L.extraLabelY);
+    for (const s of L.extraSlots) {
+      const id = extraOf()[s.i];
+      hangarButton(s.x, s.y, s.w, s.h, id ? EXTRAS[id].name : '—', sel.type === 'extra' && s.i === sel.i);
+      ctx.fillStyle = '#5f6e84';
+      ctx.font = '11px Consolas, monospace';
+      ctx.fillText(String(s.i + 1), s.x + 5, s.y + 13);
+    }
+
+    ctx.fillStyle = '#9fb3c8';
+    ctx.font = '12px Consolas, monospace';
+    ctx.fillText({ laser: 'Láseres', miss: 'Lanzamisiles', gen: 'Generadores', extra: 'Extras' }[L.optType], L.px + 20, L.optLabelY);
     // Cada pieza muestra cuántas unidades libres tiene; las que no quedan libres aparecen apagadas
-    const cur = sel.type === 'gen' ? genOf()[sel.i] : equipOf()[sel.i];
+    const cur = slotArr(sel.type)[sel.i];
+    const names = { laser: LASERS, miss: MISSILES, gen: GENERATORS, extra: EXTRAS };
     for (const o of L.options) {
       let name = 'Vacío', free = 1;
       if (o.id) {
         free = freeOf(L.optType, o.id, cur);
-        name = `${L.optType === 'gen' ? GENERATORS[o.id].name : LASERS[o.id].name} (${free})`;
+        name = `${names[L.optType][o.id].name} (${free})`;
       }
       hangarButton(o.x, o.y, o.w, o.h, name, false, o.id && free <= 0);
     }
@@ -3980,7 +4032,7 @@
       up: g.up, credits: g.credits, uridium: g.uridium, exp: g.exp, honor: g.honor,
       cargo: g.cargo, refine: g.refine, missions: g.missions, nextMission: g.nextMission, missionPos: g.missionPos,
       mapOpen: g.mapOpen, mapPos: g.mapPos, playerId: g.playerId, playerPos: g.playerPos, navePos: g.navePos, refinePos: g.refinePos, teleportBonus: g.teleportBonus, lootKeys: g.lootKeys,
-      shipId: g.shipId, equip: g.equip, generators: g.generators, inv: g.inv, boost: g.boost,
+      shipId: g.shipId, equip: g.equip, generators: g.generators, missiles: g.missiles, extras: g.extras, inv: g.inv, boost: g.boost,
       bots: g.allies.map(b => ({ name: b.name, zi: b.zi, x: b.x, y: b.y, exp: b.exp, honor: b.honor })),
       world: { ...g.world, [g.zone.id]: saveAliens(g.aliens) },
       bar: g.bar,
@@ -4001,9 +4053,9 @@
     g.zi = d.zi; g.zone = ZONES[d.zi];
     g.world = d.world || {};
     g.aliens = restoreAliens(g.world[g.zone.id]);
-    g.shipId = d.shipId; g.equip = d.equip; g.generators = d.generators;
+    g.shipId = d.shipId; g.equip = d.equip; g.generators = d.generators; g.missiles = d.missiles || {}; g.extras = d.extras || {};
     // Las partidas guardadas antes de un tipo de inventario (p. ej. naves) reciben lo que les falte a partir de lo equipado
-    g.inv = { ...inventoryFrom(d.equip, d.generators || {}, d.shipId), ...d.inv };
+    g.inv = { ...inventoryFrom(d.equip, d.generators || {}, d.shipId, d.missiles || {}, d.extras || {}), ...d.inv };
     g.up = d.up; g.credits = d.credits; g.uridium = d.uridium; g.exp = d.exp; g.honor = d.honor;
     g.cargo = { ...g.cargo, ...d.cargo };
     g.refine = { ...g.refine, ...d.refine };
