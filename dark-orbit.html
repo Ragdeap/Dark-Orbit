@@ -104,7 +104,8 @@
 
   // Sólo los mapas X1 y X8 tienen base (1-1, 2-1, 3-1, 1-8, 2-8, 3-8). En los demás no hay zona segura ni estación.
   // Cuando la zona no tiene base, la nave reaparece en la base principal (3-1).
-  const MAIN_BASE = ZONES.find(z => z.id === '3-1').base;
+  const MAIN_ZI = ZONES.findIndex(z => z.id === '3-1');
+  const MAIN_BASE = ZONES[MAIN_ZI].base;
   const respawnPoint = () => g.zone.base || MAIN_BASE;
 
   // Niveles del jugador (32). PE necesaria para el nivel N = 10000 * 2^(N - 2); el nivel 1 empieza en 0 PE.
@@ -312,9 +313,9 @@
         hp: SHIPS.PHOENIX.hp, maxHp: SHIPS.PHOENIX.hp,
         shield: 0, maxShield: 0, absorb: 0,
         damage: 0, cool: 0, ammo: 'LCB10', missile: null, missCool: 0,  // damage: bonus de las mejoras, se suma al de los láseres
-        target: null, tx: null, ty: null, dead: false, respawnT: 0,
+        target: null, tx: null, ty: null, dead: false,
         attacking: false, rank: null, company: 'VRU', slowT: 0, slowF: 1,
-        spawnT: 0, combatT: 0, nazBroken: false,
+        spawnT: 0, combatT: 0, nazBroken: false, invulT: 0,
       },
       up: { dmg: 0, hp: 0, spd: 0 },
       zi: 0, zone: ZONES[0],
@@ -329,7 +330,7 @@
       naveOpen: false, navePos: null,
       playerOpen: false, playerPos: null, playerId: String(Math.floor(10000000 + Math.random() * 90000000)),
       teleportBonus: 0, lootKeys: 0,
-      safeT: 0, wasSafe: false,
+      safeT: 0, wasSafe: false, clock: 0, lastSpot: -Infinity,
       shipId: 'PHOENIX',
       equip: { PHOENIX: ['LF1'] },
       generators: {},
@@ -377,7 +378,7 @@
   function inSafeZone() {
     const p = g.p, z = g.zone;
     if (z.base && dist(p.x, p.y, z.base.x, z.base.y) < z.base.r) return true;
-    return !!portalInRange();
+    return inNaz();
   }
 
   function showBanner(text) {
@@ -402,20 +403,32 @@
 
   // Teletransporte: solo disponible a esta distancia de la puerta (la misma que la zona segura).
   // Se activa con el icono sobre la puerta o con la tecla J; no ocurre al pasar por encima.
-  const PORTAL_RANGE = 200;
+  const PORTAL_RANGE = 200;   // alcance del teletransporte (tecla J o icono)
+  const NAZ_RANGE = 720;      // radio de la zona de no ataque: 6 celdas del minimapa (120 unidades por celda)
   const SPAWN_PROTECT = 15;   // segundos de protección tras cruzar un portal
   const COMBAT_TIME = 8;      // segundos de combate tras una acción hostil o un golpe recibido
+  // Reaparición tras morir: base (gratis), portal más cercano o lugar de la muerte
+  const REVIVE_PORTAL_COST = 500, REVIVE_SPOT_COST = 1500;
+  const REVIVE_STREAK = 300;  // segundos: repetir la reaparición en el lugar de la muerte dentro de este plazo duplica su coste
+  const REVIVE_INVULN = 15;   // segundos de invulnerabilidad tras reaparecer en un portal o en el lugar de la muerte
+  const REVIVE_HP = 0.1;      // fracción de la vida máxima con la que se reaparece; el escudo siempre nace a 0
 
   function portalInRange() {
     const p = g.p;
     return portalsOf(g.zi).find(pt => dist(p.x, p.y, pt.x, pt.y) < PORTAL_RANGE) || null;
   }
 
+  // Dentro de la zona de no ataque de algún portal de este mapa
+  function inNaz() {
+    const p = g.p;
+    return portalsOf(g.zi).some(pt => dist(p.x, p.y, pt.x, pt.y) < NAZ_RANGE);
+  }
+
   // Zona de no ataque: la base siempre protege; el anillo del portal, mientras la nave no haya roto la protección
   function nazProtected() {
     const p = g.p, z = g.zone;
     if (z.base && dist(p.x, p.y, z.base.x, z.base.y) < z.base.r) return true;
-    if (!portalInRange()) return false;
+    if (!inNaz()) return false;
     return p.spawnT > 0 || (!p.nazBroken && p.combatT <= 0);
   }
 
@@ -424,7 +437,79 @@
     const p = g.p;
     p.spawnT = 0;
     p.combatT = COMBAT_TIME;
-    if (portalInRange()) p.nazBroken = true;
+    p.invulT = 0;
+    if (inNaz()) p.nazBroken = true;
+  }
+
+  // Menú de reaparición: tres opciones, en este orden. Las que no se pueden pagar o no existen quedan apagadas
+  function reviveOptions() {
+    const p = g.p;
+    const near = portalsOf(g.zi).sort((a, b) => dist(p.x, p.y, a.x, a.y) - dist(p.x, p.y, b.x, b.y))[0] || null;
+    const spotCost = g.clock - g.lastSpot < REVIVE_STREAK ? REVIVE_SPOT_COST * 2 : REVIVE_SPOT_COST;
+    return [
+      { id: 'base', label: 'Base', cost: 0, ok: true },
+      { id: 'portal', label: 'Portal más cercano', cost: REVIVE_PORTAL_COST, ok: !!near && g.uridium >= REVIVE_PORTAL_COST, near },
+      { id: 'spot', label: 'Lugar de la muerte', cost: spotCost, ok: g.uridium >= spotCost },
+    ];
+  }
+
+  const REVIVE_W = 200, REVIVE_H = 64, REVIVE_GAP = 16;
+  function reviveGeom(i) {
+    const x0 = W / 2 - (3 * REVIVE_W + 2 * REVIVE_GAP) / 2;
+    return { x: x0 + i * (REVIVE_W + REVIVE_GAP), y: H * 0.42, w: REVIVE_W, h: REVIVE_H };
+  }
+
+  function reviveIndexAt(x, y) {
+    for (let i = 0; i < 3; i++) if (inBox(reviveGeom(i), x, y)) return i;
+    return -1;
+  }
+
+  function drawReviveMenu() {
+    drawCenter('Nave destruida', '#ff6b6b', 22, 1, H * 0.3);
+    ctx.save();
+    ctx.textAlign = 'center';
+    reviveOptions().forEach((o, i) => {
+      const b = reviveGeom(i), hover = o.ok && inBox(b, mouse.x, mouse.y);
+      ctx.fillStyle = o.ok ? (hover ? 'rgba(127,214,255,0.35)' : 'rgba(127,214,255,0.18)') : 'rgba(255,255,255,0.05)';
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+      ctx.strokeStyle = o.ok ? '#7fd6ff' : '#4a5a6a';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w, b.h);
+      ctx.fillStyle = o.ok ? '#ffffff' : '#6b7a88';
+      ctx.font = 'bold 14px Consolas, monospace';
+      ctx.fillText(o.label, b.x + b.w / 2, b.y + 26);
+      ctx.fillStyle = o.ok ? '#9fe3ff' : '#6b7a88';
+      ctx.font = '13px Consolas, monospace';
+      ctx.fillText(o.cost ? `${formatNum(o.cost)} Uridium` : 'Gratis', b.x + b.w / 2, b.y + 48);
+    });
+    ctx.restore();
+  }
+
+  // Reaparece con la opción elegida. La base no da protección: ya es zona segura
+  function revive(id) {
+    const p = g.p;
+    const o = reviveOptions().find(x => x.id === id);
+    if (!p.dead || !o || !o.ok) return;
+    g.uridium -= o.cost;
+    p.dead = false;
+    p.hp = maxHpNow() * REVIVE_HP;
+    p.shield = 0;
+    p.vx = 0; p.vy = 0;
+    p.invulT = 0;
+    if (id === 'base') {
+      // Sin base en este mapa, se vuelve a la de 3-1 cambiando de mapa
+      if (g.zone.base) { p.x = g.zone.base.x; p.y = g.zone.base.y; }
+      else setZone(MAIN_ZI, MAIN_BASE);
+    } else if (id === 'portal') {
+      // En el centro exacto de la puerta, para quedar siempre dentro de su zona de invulnerabilidad
+      p.x = o.near.x; p.y = o.near.y;
+      p.invulT = REVIVE_INVULN;
+    } else {
+      // Se queda donde murió; la nave no se mueve mientras estaba destruida
+      g.lastSpot = g.clock;
+      p.invulT = REVIVE_INVULN;
+    }
+    saveGame();
   }
 
   function teleport(pt) {
@@ -615,7 +700,7 @@
 
   function hurt(d) {
     const p = g.p;
-    if (p.dead) return;
+    if (p.dead || p.invulT > 0) return;
     p.combatT = COMBAT_TIME;
     g.hitFlash = 0.12;
     spawnText(0, -30, Math.round(d), '#b07cff', true);
@@ -626,7 +711,6 @@
     if (p.hp <= 0) {
       p.hp = 0;
       p.dead = true;
-      p.respawnT = 3;
       p.target = null; p.tx = null; p.attacking = false;
       g.honor -= Math.floor(g.honor * DEATH_HONOR_LOSS);
       explode(p.x, p.y, 22, '#7fd6ff');
@@ -900,23 +984,14 @@
     const types = zoneTypes(g.zone);
     while (g.aliens.length < ALIEN_CAP && types.length) spawnAlien(types);
 
-    if (p.dead) {
-      p.respawnT -= dt;
-      if (p.respawnT <= 0) {
-        p.dead = false;
-        p.hp = maxHpNow();
-        const rp = respawnPoint();
-        p.x = rp.x; p.y = rp.y; p.vx = 0; p.vy = 0;
-      }
-    } else {
-      updatePlayer(dt);
-    }
+    if (!p.dead) updatePlayer(dt);
 
     // Protección de llegada: se corta al salir del anillo. El combate se agota solo y devuelve la protección
-    if (p.spawnT > 0 && !portalInRange()) p.spawnT = 0;
+    if (p.spawnT > 0 && !inNaz()) p.spawnT = 0;
     p.spawnT = Math.max(0, p.spawnT - dt);
     p.combatT = Math.max(0, p.combatT - dt);
     if (p.combatT <= 0) p.nazBroken = false;
+    p.invulT = Math.max(0, p.invulT - dt);
 
     updateAliens(dt);
     updateAllies(dt);
@@ -937,6 +1012,7 @@
     if (g.banner > 0) g.banner -= dt;
     if (g.rewardT > 0) g.rewardT -= dt;
     g.hitFlash = Math.max(0, g.hitFlash - dt);
+    g.clock += dt;
   }
 
   function updatePlayer(dt) {
@@ -1423,6 +1499,15 @@
     }
     for (const portal of portalsOf(g.zi)) {
       const x = sx(portal.x), y = sy(portal.y);
+      // Línea de puntos fina: borde exacto de la zona de no ataque, la misma que usa la protección
+      ctx.save();
+      ctx.setLineDash([2, 4]);
+      ctx.strokeStyle = 'rgba(127,214,255,0.6)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(x, y, NAZ_RANGE, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
       ctx.save();
       ctx.shadowColor = '#ffd166';
       ctx.shadowBlur = 25;
@@ -2972,7 +3057,7 @@
     drawMoveMarker();
     drawPlayer();
 
-    if (g.p.dead) drawCenter(`Reapareciendo en ${Math.ceil(g.p.respawnT)}...`, '#ff6b6b', 22, 1, H * 0.3);
+    if (g.p.dead) drawReviveMenu();
     if (g.hitFlash > 0) {
       ctx.fillStyle = `rgba(255,40,40,${g.hitFlash * 2})`;
       ctx.fillRect(0, 0, W, H);
@@ -3008,6 +3093,8 @@
   canvas.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
   canvas.addEventListener('contextmenu', e => e.preventDefault());
   canvas.addEventListener('mousedown', e => {
+    // Nave destruida: solo el menú de reaparición responde a los clics
+    if (g.p.dead) { const i = reviveIndexAt(e.clientX, e.clientY); if (i >= 0) revive(reviveOptions()[i].id); return; }
     if (g.hangar.open) { hangarClick(e.clientX, e.clientY); return; }
     // Icono del hangar: abre el hangar solo dentro de la base
     if (inBox(hangarIconGeom(), e.clientX, e.clientY)) {
