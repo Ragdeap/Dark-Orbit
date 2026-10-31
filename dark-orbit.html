@@ -206,8 +206,7 @@
   // sus ranuras de láser se crean automáticamente.
   const SHIPS = {
     PHOENIX: { name: 'Phoenix', hp: 104000, speed: 320, slots: 1, genSlots: 1, cargo: 100 },
-    // Nave de pruebas del entorno de desarrollo, no es una nave oficial
-    ADMINISTRADOR: { name: 'Administrador', hp: 500000, speed: 800, slots: 20, genSlots: 20, cargo: 5000 },
+    LIBERATOR: { name: 'Liberator', hp: 116000, speed: 300, slots: 4, genSlots: 6, cargo: 400 },
   };
   // Base de datos de láseres. Son distintos de la munición.
   const LASERS = {
@@ -1512,7 +1511,7 @@
       ctx.shadowColor = '#ffd166';
       ctx.shadowBlur = 25;
       ctx.beginPath();
-      ctx.arc(x, y, 40, 0, Math.PI * 2);
+      ctx.arc(x, y, 52, 0, Math.PI * 2);
       ctx.strokeStyle = '#ffd166';
       ctx.lineWidth = 3;
       ctx.stroke();
@@ -1520,7 +1519,7 @@
       ctx.fillStyle = '#ffd166';
       ctx.font = '13px Consolas, monospace';
       ctx.textAlign = 'center';
-      ctx.fillText('PORTAL', x, y - 50);
+      ctx.fillText(ZONES[portal.to].id, x, y + 68);
       ctx.textAlign = 'left';
       // El icono de teletransporte solo aparece al alcance de la puerta
       if (dist(g.p.x, g.p.y, portal.x, portal.y) < PORTAL_RANGE) drawPortalIcon(portalIconBox(portal));
