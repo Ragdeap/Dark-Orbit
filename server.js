@@ -13,17 +13,19 @@ const ROOT = __dirname;
 const GAME = path.join(ROOT, 'dark-orbit.html');
 const RANKS_DIR = path.join(ROOT, 'rangos');
 const COMPANIES_DIR = path.join(ROOT, 'empresas');
+const SOUNDS_DIR = path.join(ROOT, 'sonidos');
 const DATA_DIR = path.join(ROOT, 'data');
 const SAVE_FILE = path.join(DATA_DIR, 'save.json');
 const MAX_BODY = 1024 * 1024;
 
-// Sólo se sirven el juego, los iconos de rango y los logos de empresa; nada más del proyecto
+// Sólo se sirven el juego, los iconos de rango, los logos de empresa y los sonidos; nada más del proyecto
 function staticFile(pathname) {
   if (pathname === '/') return GAME;
   const file = path.normalize(path.join(ROOT, decodeURIComponent(pathname)));
   if (file === GAME) return GAME;
-  const dir = path.dirname(file);
-  if ((dir === RANKS_DIR || dir === COMPANIES_DIR) && path.extname(file) === '.svg') return file;
+  const dir = path.dirname(file), ext = path.extname(file);
+  if ((dir === RANKS_DIR || dir === COMPANIES_DIR) && ext === '.svg') return file;
+  if (dir === SOUNDS_DIR && ext === '.opus') return file;
   return null;
 }
 
@@ -77,7 +79,7 @@ const server = http.createServer(async (req, res) => {
   }
   fs.readFile(file, (err, data) => {
     if (err) { res.writeHead(404); res.end(); return; }
-    const type = path.extname(file) === '.svg' ? 'image/svg+xml' : 'text/html; charset=utf-8';
+    const type = { '.svg': 'image/svg+xml', '.opus': 'audio/ogg' }[path.extname(file)] || 'text/html; charset=utf-8';
     res.writeHead(200, { 'Content-Type': type });
     res.end(data);
   });

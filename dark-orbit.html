@@ -11,6 +11,10 @@
 </head>
 <body>
 <canvas id="c"></canvas>
+<div id="entrada" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;background:#05080f;color:#d7e6ff;font:16px Consolas,monospace">
+  <div style="font-size:28px;letter-spacing:4px;color:#ffd166">DARK ORBIT</div>
+  <button id="entrar" disabled style="padding:10px 40px;background:#1b2a44;border:1px solid #ffd166;color:#ffd166;font:16px Consolas,monospace;cursor:pointer">Cargando...</button>
+</div>
 <script>
 (() => {
   // Sin servidor local no se juega: todo el progreso se guarda en data/save.json
@@ -3964,11 +3968,41 @@
     requestAnimationFrame(frame);
   }
 
-  // El bucle no arranca hasta tener el progreso cargado
+  // Sonido de entrada: solo lo oye este jugador, una vez. Se llama desde el clic de "Entrar",
+  // así que el navegador ya permite reproducir audio
+  function playLoginSound() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      fetch('sonidos/Login.opus')
+        .then(r => r.arrayBuffer())
+        .then(b => audioCtx.decodeAudioData(b))
+        .then(buf => {
+          const src = audioCtx.createBufferSource();
+          src.buffer = buf;
+          src.connect(audioCtx.destination);
+          src.start();
+        })
+        .catch(() => {});   // Sin audio disponible: el juego sigue funcionando
+    } catch (err) {
+      // Sin audio disponible: el juego sigue funcionando
+    }
+  }
+
+  // Entrar es un clic del jugador: quita la pantalla de entrada, suena el sonido y empieza la partida
+  function enterGame(entrada) {
+    entrada.remove();
+    playLoginSound();
+    requestAnimationFrame(frame);
+  }
+
+  // El botón de entrar se activa cuando el progreso está cargado
   readSave().then(d => {
     if (!loadGame(d)) reset();
     addEventListener('pagehide', saveGame);
-    requestAnimationFrame(frame);
+    const entrar = document.getElementById('entrar');
+    entrar.textContent = 'Entrar';
+    entrar.disabled = false;
+    entrar.addEventListener('click', () => enterGame(document.getElementById('entrada')), { once: true });
   }, showServerMissing);
 })();
 </script>
