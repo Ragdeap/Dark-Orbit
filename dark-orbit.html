@@ -220,13 +220,15 @@
     PLT2021: { name: 'PLT-2021', dmg: 4000, cool: 1, speed: 700, life: 2.5, color: '#38bdf8' },
     PLT3030: { name: 'PLT-3030', dmg: 6000, cool: 1, speed: 700, life: 2.5, color: '#0ea5e9' },
   };
-  // Barra de acción: 10 casillas. Las 5 primeras son láseres (munición); las 4 siguientes son misiles.
-  // attack: la casilla inicia el ataque si hay un NPC fijado (en el futuro habrá casillas sin ataque)
-  const BAR = [
-    { ammo: 'LCB10', attack: true }, { ammo: 'MCB25', attack: true }, { ammo: 'MCB50', attack: true },
-    { ammo: 'UCB100', attack: true }, { ammo: 'RSB75', attack: true },
+  // Barra de acción principal por defecto: 10 casillas. La real de cada jugador está en g.bar y se guarda con la partida.
+  // Una casilla de munición ataca al NPC fijado; una de misil sólo cambia el misil seleccionado
+  const DEFAULT_BAR = [
+    { ammo: 'LCB10' }, { ammo: 'MCB25' }, { ammo: 'MCB50' }, { ammo: 'UCB100' }, { ammo: 'RSB75' },
     { missile: 'R310' }, { missile: 'PLT2026' }, { missile: 'PLT2021' }, { missile: 'PLT3030' }, null,
   ];
+  // Segunda barra desplegable: sección de categorías. De momento sólo láseres y misiles, sin texto; el resto de casillas vacías
+  const BAR_EXTRA = [{ category: 'laser' }, { category: 'missile' }, ...Array(8).fill(null)];
+  const CATEGORY_NAMES = { laser: 'Láseres', missile: 'Misiles' };
   const BAR_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'];
   const SLOT = 60, GAP = 8;
 
@@ -283,7 +285,8 @@
       },
       up: { dmg: 0, hp: 0, spd: 0 },
       zi: 0, zone: ZONES[0],
-      aliens: [], world: {}, bullets: [], enemyShots: [], pickups: [], parts: [], texts: [], pems: [],
+      aliens: [], world: {}, bullets: [], enemyShots: [], pickups: [], parts: [], texts: [], pems: [], barOpen: false, barCat: null, barDrag: null, barFade: null,
+      bar: DEFAULT_BAR.map(it => (it ? { ...it } : null)),
       stars: Array.from({ length: 260 }, () => ({ x: Math.random(), y: Math.random(), z: rnd(0.2, 1) })),
       credits: 0, uridium: 0, exp: 0, honor: 0, cargo: Object.fromEntries(MATERIALS.map(m => [m.key, 0])),
       refine: Object.fromEntries(REFINE_MATERIALS.map(m => [m.key, 0])),
@@ -860,6 +863,7 @@
     updatePickups(dt);
     updateParticles(dt);
     updatePems(dt);
+    updateBarFade(dt);
     updateTexts(dt);
 
     // Aviso al entrar en una zona segura; se desvanece tras unos segundos
@@ -2163,10 +2167,11 @@
   }
 
   // Etiqueta que aparece debajo de un icono al pasar el ratón
-  function drawIconTooltip(b, label) {
+  // above: el rótulo va encima del icono en lugar de debajo
+  function drawIconTooltip(b, label, above = false) {
     ctx.font = '13px Consolas, monospace';
     const tw = ctx.measureText(label).width;
-    const bx = b.x + b.w / 2 - (tw + 16) / 2, by = b.y + b.h + 8;
+    const bx = b.x + b.w / 2 - (tw + 16) / 2, by = above ? b.y - 30 : b.y + b.h + 8;
     ctx.fillStyle = '#0b1424';
     ctx.fillRect(bx, by, tw + 16, 22);
     ctx.strokeStyle = '#ffd166';
@@ -2482,11 +2487,147 @@
     ctx.restore();
   }
 
+  // Barra principal (teclas 1 a 0). Si la flecha está desplegada, la fila de categorías encima; si hay una categoría abierta, sus objetos encima de esa fila
   function drawActionBar() {
-    const x0 = barX0(), y0 = barY0();
+    drawBarRow(barY0(), g.bar, true);
+    drawBarArrow();
+    if (g.barOpen) {
+      drawBarRow(barY0() - SLOT - GAP, BAR_EXTRA, false);
+      if (g.barCat) drawBarRow(barSubGeom().y, barSubRow(), false);
+      drawCategoryTip();
+    }
+    drawBarTip();
+    drawBarDrag();
+  }
+
+  // Lo que muestra el rótulo de una casilla de la barra principal: nombre, cantidad y efecto
+  function barItemLines(item) {
+    if (item.ammo) {
+      const a = AMMO[item.ammo];
+      return [`Tipo de láser: ${a.name}`, 'Cantidad: ∞', `Efecto: daño láser multiplicado por ${a.mult}`];
+    }
+    const m = MISSILES[item.missile];
+    return [`Tipo de misil: ${m.name}`, 'Cantidad: ∞', `Daños medios: ${m.dmg}`];
+  }
+
+  // Al pasar el cursor sobre una casilla ocupada de la barra principal, su rótulo encima de la barra
+  function drawBarTip() {
+    if (g.barDrag) return;
+    const i = barSlotAt(mouse.x, mouse.y);
+    const item = i >= 0 ? g.bar[i] : null;
+    if (!item) return;
+    const lines = barItemLines(item);
+    ctx.font = '13px Consolas, monospace';
+    const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 16, h = lines.length * 18 + 10;
+    const cx = barX0() + i * (SLOT + GAP) + SLOT / 2;
+    const bx = clamp(cx - w / 2, 4, W - w - 4), by = barY0() - h - 8;
+    ctx.fillStyle = '#0b1424';
+    ctx.fillRect(bx, by, w, h);
+    ctx.strokeStyle = '#ffd166';
+    ctx.strokeRect(bx + 0.5, by + 0.5, w - 1, h - 1);
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    lines.forEach((l, k) => ctx.fillText(l, bx + 8, by + 18 + k * 18));
+  }
+
+  // Al pasar el cursor sobre una categoría, un rótulo encima con lo que contiene. Se dibuja al final para que no lo tape la subsección
+  function drawCategoryTip() {
+    BAR_EXTRA.forEach((item, i) => {
+      if (!item || !item.category) return;
+      const r = { x: barX0() + i * (SLOT + GAP), y: barY0() - SLOT - GAP, w: SLOT, h: SLOT };
+      if (inBox(r, mouse.x, mouse.y)) drawIconTooltip(r, CATEGORY_NAMES[item.category], true);
+    });
+  }
+
+  // Modo edición: el objeto arrastrado sigue al cursor y se resalta la casilla de la barra principal que está debajo.
+  // Un objeto que se descarta se desvanece en el sitio donde se soltó
+  function drawBarDrag() {
+    const d = g.barDrag;
+    if (d) {
+      const t = slotIn(d.x, d.y, barY0());
+      if (t >= 0) {
+        ctx.strokeStyle = '#ffd166';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(barX0() + t * (SLOT + GAP) + 1, barY0() + 1, SLOT - 2, SLOT - 2);
+      }
+      drawBarGhost(d.x, d.y, d.item, 0.85);
+    }
+    if (g.barFade) drawBarGhost(g.barFade.x, g.barFade.y, g.barFade.item, 0.85 * (1 - g.barFade.t / BAR_FADE));
+  }
+
+  // Casilla con el contenido de un objeto, centrada en (cx, cy)
+  function drawBarGhost(cx, cy, item, alpha) {
+    const x = cx - SLOT / 2, y = cy - SLOT / 2;
+    const o = item.ammo ? AMMO[item.ammo] : MISSILES[item.missile];
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = 'rgba(12,24,48,0.92)';
+    ctx.fillRect(x, y, SLOT, SLOT);
+    ctx.fillStyle = o.color;
+    ctx.fillRect(x + SLOT / 2 - 12, y + 20, 24, 4);
+    ctx.fillStyle = '#e6f2ff';
+    ctx.font = '11px Consolas, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(o.name, x + SLOT / 2, y + 42);
+    ctx.restore();
+  }
+
+  // Suelta el objeto arrastrado.
+  // - Desde la subsección: sobre una casilla de la barra principal la sobrescribe, aunque ya haya otro igual.
+  // - Desde la barra principal: fuera de la barra la casilla queda vacía; sobre otra casilla, se intercambian; sobre la misma, es un clic.
+  function dropBarItem(x, y) {
+    const d = g.barDrag;
+    g.barDrag = null;
+    const t = slotIn(x, y, barY0());
+    if (d.from === undefined) {
+      if (t >= 0) { g.bar[t] = { ...d.item }; saveGame(); }
+      return;
+    }
+    if (t < 0) {
+      g.bar[d.from] = null;
+      g.barFade = { x, y, item: d.item, t: 0 };
+      saveGame();
+    } else if (t === d.from) {
+      useSlot(d.from);
+    } else if (t >= 0) {
+      // Sobre otra casilla de la barra: se intercambian (si la otra está vacía, la casilla de origen queda vacía)
+      [g.bar[t], g.bar[d.from]] = [g.bar[d.from], g.bar[t]];
+      saveGame();
+    }
+  }
+
+  const BAR_FADE = 0.4;   // segundos que tarda en desvanecerse una casilla descartada
+  function updateBarFade(dt) {
+    if (!g.barFade) return;
+    g.barFade.t += dt;
+    if (g.barFade.t >= BAR_FADE) g.barFade = null;
+  }
+
+  // Barra guardada: sólo se aceptan munición y misiles que existan en el juego; el resto de casillas quedan vacías
+  function sanitizeBar(list) {
+    return Array.from({ length: 10 }, (_, i) => {
+      const it = Array.isArray(list) ? list[i] : null;
+      if (it && it.ammo && AMMO[it.ammo]) return { ammo: it.ammo };
+      if (it && it.missile && MISSILES[it.missile]) return { missile: it.missile };
+      return null;
+    });
+  }
+
+  // Objetos de la categoría abierta: todos los láseres o todos los misiles, en el orden de su tabla
+  function barSubRow() {
+    const items = g.barCat === 'laser'
+      ? Object.keys(AMMO).map(ammo => ({ ammo }))
+      : Object.keys(MISSILES).map(missile => ({ missile }));
+    return [...items, ...Array(10 - items.length).fill(null)];
+  }
+
+  // Una fila de 10 casillas. `keys`: muestra el número de la tecla que la activa
+  function drawBarRow(y0, row, keys) {
+    const x0 = barX0();
     for (let i = 0; i < 10; i++) {
       const x = x0 + i * (SLOT + GAP);
-      const item = BAR[i];
+      const item = row[i];
       const id = item && item.ammo;
       const a = id ? AMMO[id] : null;
       const mid = item && item.missile;
@@ -2497,10 +2638,19 @@
       ctx.strokeStyle = selected ? '#ffd166' : 'rgba(150,200,255,0.75)';
       ctx.lineWidth = selected ? 2 : 1;
       ctx.strokeRect(x + 0.5, y0 + 0.5, SLOT - 1, SLOT - 1);
-      ctx.fillStyle = '#9fb3c8';
-      ctx.font = '11px Consolas, monospace';
-      ctx.textAlign = 'left';
-      ctx.fillText(i === 9 ? '0' : String(i + 1), x + 5, y0 + 13);
+      // Categoría: sólo icono, sin texto
+      if (item && item.category) {
+        const cx = x + SLOT / 2, cy = y0 + SLOT / 2;
+        if (item.category === 'laser') drawLaserIcon(cx, cy);
+        else drawMissileIcon(cx, cy);
+        continue;
+      }
+      if (keys) {
+        ctx.fillStyle = '#9fb3c8';
+        ctx.font = '11px Consolas, monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText(i === 9 ? '0' : String(i + 1), x + 5, y0 + 13);
+      }
       if (a) {
         ctx.fillStyle = a.color;
         ctx.fillRect(x + SLOT / 2 - 12, y0 + 20, 24, 4);
@@ -2519,6 +2669,73 @@
       }
     }
     ctx.textAlign = 'left';
+  }
+
+  // Icono de láseres: dos haces paralelos con brillo y un punto de disparo
+  function drawLaserIcon(cx, cy) {
+    ctx.save();
+    ctx.strokeStyle = '#7fd6ff';
+    ctx.shadowColor = '#7fd6ff';
+    ctx.shadowBlur = 8;
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(cx - 16, cy - 5); ctx.lineTo(cx + 12, cy - 5);
+    ctx.moveTo(cx - 16, cy + 5); ctx.lineTo(cx + 12, cy + 5);
+    ctx.stroke();
+    ctx.fillStyle = '#e6f8ff';
+    ctx.beginPath();
+    ctx.arc(cx + 14, cy, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Icono de misiles: cohete apuntando hacia arriba, con aletas y llama
+  function drawMissileIcon(cx, cy) {
+    ctx.save();
+    ctx.fillStyle = '#cfe8ff';
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - 16); ctx.lineTo(cx + 5, cy - 6); ctx.lineTo(cx + 5, cy + 8);
+    ctx.lineTo(cx - 5, cy + 8); ctx.lineTo(cx - 5, cy - 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#7d8ea8';
+    ctx.beginPath();
+    ctx.moveTo(cx - 5, cy + 2); ctx.lineTo(cx - 9, cy + 10); ctx.lineTo(cx - 5, cy + 8);
+    ctx.closePath();
+    ctx.moveTo(cx + 5, cy + 2); ctx.lineTo(cx + 9, cy + 10); ctx.lineTo(cx + 5, cy + 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#ff9f1c';
+    ctx.beginPath();
+    ctx.moveTo(cx - 3, cy + 8); ctx.lineTo(cx + 3, cy + 8); ctx.lineTo(cx, cy + 15);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Flecha a la derecha de la décima casilla. Cerrada apunta hacia arriba; al desplegar la segunda barra apunta hacia abajo
+  function drawBarArrow() {
+    const b = barArrowGeom();
+    const hover = inBox(b, mouse.x, mouse.y);
+    ctx.fillStyle = hover ? 'rgba(255,209,102,0.25)' : 'rgba(12,24,48,0.92)';
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeStyle = hover ? '#fff0b3' : 'rgba(150,200,255,0.75)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
+    ctx.fillStyle = '#ffd166';
+    ctx.beginPath();
+    if (g.barOpen) {
+      ctx.moveTo(b.x + 5, b.y + 7);
+      ctx.lineTo(b.x + 15, b.y + 7);
+      ctx.lineTo(b.x + 10, b.y + 14);
+    } else {
+      ctx.moveTo(b.x + 5, b.y + 13);
+      ctx.lineTo(b.x + 15, b.y + 13);
+      ctx.lineTo(b.x + 10, b.y + 6);
+    }
+    ctx.closePath();
+    ctx.fill();
   }
 
   // Geometría del minimapa (esquina inferior derecha), compartida por el dibujo y los clics
@@ -2763,8 +2980,37 @@
     // Icono de teletransporte sobre la puerta: solo funciona al alcance
     const near = portalInRange();
     if (near && inBox(portalIconBox(near), e.clientX, e.clientY)) { teleport(near); return; }
+    // Flecha de la barra: despliega o recoge las filas de categorías (al recogerlas se cierra la categoría abierta)
+    if (inBox(barArrowGeom(), e.clientX, e.clientY)) { g.barOpen = !g.barOpen; if (!g.barOpen) g.barCat = null; return; }
+    if (g.barOpen) {
+      // Sección de categoría: abre o cierra la fila de objetos que tiene encima
+      const sec = slotIn(e.clientX, e.clientY, barExtraGeom().y);
+      if (sec >= 0 && BAR_EXTRA[sec] && BAR_EXTRA[sec].category) {
+        const cat = BAR_EXTRA[sec].category;
+        g.barCat = g.barCat === cat ? null : cat;
+        return;
+      }
+      // Objetos de la categoría abierta: un clic lo selecciona y el doble clic ataca con él
+      if (g.barCat) {
+        const si = slotIn(e.clientX, e.clientY, barSubGeom().y);
+        if (si >= 0) {
+          const item = barSubRow()[si];
+          // Modo edición: el objeto se puede arrastrar a una casilla de la barra principal
+          if (item) g.barDrag = { item, x: e.clientX, y: e.clientY };
+          pickBarItem(item, e.detail >= 2);
+          return;
+        }
+        if (inBox(barSubGeom(), e.clientX, e.clientY)) return;
+      }
+      if (inBox(barExtraGeom(), e.clientX, e.clientY)) return;
+    }
     const slot = barSlotAt(e.clientX, e.clientY);
-    if (slot >= 0) { useSlot(slot); return; }
+    if (slot >= 0) {
+      // Modo edición: arrastrar una casilla la quita de la barra si se suelta fuera; un clic sin arrastrar la usa
+      if (g.barOpen && g.bar[slot]) { g.barDrag = { item: g.bar[slot], x: e.clientX, y: e.clientY, from: slot }; return; }
+      useSlot(slot);
+      return;
+    }
 
     // Clic en el minimapa: la nave viaja al punto marcado. Cualquier otro clic lo cancela.
     const mm = minimapGeom();
@@ -2801,10 +3047,12 @@
   // Arrastre de la ventana de misiones: sigue al cursor hasta soltar el botón
   addEventListener('mousemove', e => {
     if (g.drag) g[g.drag.key] = { x: e.clientX - g.drag.dx, y: e.clientY - g.drag.dy };
+    if (g.barDrag) { g.barDrag.x = e.clientX; g.barDrag.y = e.clientY; }
   });
 
-  addEventListener('mouseup', () => {
+  addEventListener('mouseup', e => {
     g.drag = null;
+    if (g.barDrag) { dropBarItem(e.clientX, e.clientY); return; }
     if (!mouse.holding) return;
     mouse.holding = false;
     // Un clic corto es un destino; si se mantuvo pulsado, la nave se detiene al soltar
@@ -2819,15 +3067,40 @@
   }
 
   function useSlot(i) {
-    const item = BAR[i];
+    const item = g.bar[i];
     if (!item) return;
     if (item.ammo) g.p.ammo = item.ammo;
     if (item.missile) g.p.missile = item.missile;
-    if (item.attack && g.p.target && g.p.target.hp > 0 && !g.p.dead) startAttack(g.p.target);
+    if (item.ammo && g.p.target && g.p.target.hp > 0 && !g.p.dead) startAttack(g.p.target);
+  }
+
+  // Objeto de una categoría: el clic lo selecciona como munición o misil. El doble clic además ataca con él
+  // (láser: ataca al NPC fijado; misil: lo dispara contra el NPC fijado)
+  function pickBarItem(item, dbl) {
+    if (!item) return;
+    if (item.ammo) g.p.ammo = item.ammo;
+    if (item.missile) g.p.missile = item.missile;
+    if (!dbl || g.p.dead) return;
+    if (item.missile) fireMissile();
+    else if (g.p.target && g.p.target.hp > 0) startAttack(g.p.target);
   }
 
   function barX0() { return W / 2 - (10 * SLOT + 9 * GAP) / 2; }
   function barY0() { return H - SLOT - 24; }
+  // Flecha a la derecha de la décima casilla, centrada verticalmente en la barra
+  function barArrowGeom() { return { x: barX0() + 10 * (SLOT + GAP), y: barY0() + (SLOT - 20) / 2, w: 20, h: 20 }; }
+  // Fila de categorías, encima de la principal y alineada con ella, cuando la flecha está desplegada
+  function barExtraGeom() { return { x: barX0(), y: barY0() - SLOT - GAP, w: 10 * SLOT + 9 * GAP, h: SLOT }; }
+  // Fila de objetos de la categoría abierta, encima de la fila de categorías
+  function barSubGeom() { return { x: barX0(), y: barY0() - 2 * (SLOT + GAP), w: 10 * SLOT + 9 * GAP, h: SLOT }; }
+
+  // Casilla de una fila (y0 = borde superior) en la que cae (x, y), o -1
+  function slotIn(x, y, y0) {
+    const i = Math.floor((x - barX0()) / (SLOT + GAP));
+    if (i < 0 || i > 9) return -1;
+    const rel = x - barX0() - i * (SLOT + GAP);
+    return rel <= SLOT && y >= y0 && y <= y0 + SLOT ? i : -1;
+  }
 
   function barSlotAt(x, y) {
     const i = Math.floor((x - barX0()) / (SLOT + GAP));
@@ -2878,6 +3151,7 @@
       shipId: g.shipId, equip: g.equip, generators: g.generators,
       bots: g.allies.map(b => ({ name: b.name, zi: b.zi, x: b.x, y: b.y, exp: b.exp, honor: b.honor })),
       world: { ...g.world, [g.zone.id]: saveAliens(g.aliens) },
+      bar: g.bar,
     };
     fetch('/api/save', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), keepalive: true })
       .then(r => { storageOk = r.ok; }, () => { storageOk = false; });
@@ -2906,6 +3180,8 @@
     if (d.navePos) g.navePos = d.navePos;
     g.teleportBonus = d.teleportBonus || 0;
     g.lootKeys = d.lootKeys || 0;
+    // Partidas anteriores a la barra editable no tienen "bar": se queda la barra por defecto
+    if (Array.isArray(d.bar)) g.bar = sanitizeBar(d.bar);
     const p = g.p;
     p.x = d.x; p.y = d.y; p.maxHp = d.maxHp; p.hp = d.hp > 0 ? d.hp : d.maxHp;
     p.damage = d.damage; p.speed = d.speed;
