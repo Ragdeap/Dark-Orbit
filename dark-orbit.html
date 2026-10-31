@@ -351,6 +351,7 @@
       banner: 0, bannerText: '', rewardT: 0, rewardLines: [], hitFlash: 0, paused: false,
       missionOpen: false, missionTab: 'summary', stationOpen: false,
       naveOpen: false, navePos: null, refineOpen: false, refinePos: null, refineTab: 'refine',
+      mapOpen: true, mapPos: null,
       playerOpen: false, playerPos: null, playerId: String(Math.floor(10000000 + Math.random() * 90000000)),
       teleportBonus: 0, lootKeys: 0,
       safeT: 0, wasSafe: false, clock: 0, lastSpot: -Infinity,
@@ -3349,15 +3350,97 @@
     ctx.fill();
   }
 
-  // Geometría del minimapa (esquina inferior derecha), compartida por el dibujo y los clics
+  // Ventana del minimapa: icono cuando está colapsado; abierta, arrastrable y con cabecera de 30 px
+  const MINIMAP_WIN_W = 236, MINIMAP_WIN_H = 176;
+  // La barra de peligrosidad solo existe en los mapas X1 y X2 (segundo número 1 o 2), como ayuda para jugadores nuevos
+  function dangerBarShown() { return /-[12]$/.test(g.zone.id); }
+
+  function minimapWinGeom() {
+    if (!g.mapOpen) return { x: W - 272, y: 16, w: 36, h: 36 };
+    const w = dangerBarShown() ? MINIMAP_WIN_W : MINIMAP_WIN_W - 20;
+    const pos = g.mapPos || { x: W - w - 16, y: H - MINIMAP_WIN_H - 16 };
+    const x = clamp(pos.x, 0, W - w), y = clamp(pos.y, 0, H - MINIMAP_WIN_H);
+    return { x, y, w, h: MINIMAP_WIN_H, close: { x: x + w - 26, y: y + 6, w: 20, h: 20 } };
+  }
+
+  // Geometría del mapa dentro de la ventana, compartida por el dibujo y los clics
   function minimapGeom() {
-    const mw = 200, mh = 130, mx = W - mw - 16, my = H - mh - 16, z = g.zone;
+    const win = minimapWinGeom(), mw = 200, mh = 130, mx = win.x + (dangerBarShown() ? 26 : 8), my = win.y + 38, z = g.zone;
     const s = Math.min(mw / z.w, mh / z.h);
     const ox = mx + (mw - z.w * s) / 2, oy = my + (mh - z.h * s) / 2;
     return { mw, mh, mx, my, s, ox, oy };
   }
 
+  // Icono del minimapa colapsado: un recuadro con la cruz de la nave
+  function drawMapIcon(b) {
+    const hover = inBox(b, mouse.x, mouse.y);
+    const bg = ctx.createLinearGradient(0, b.y, 0, b.y + b.h);
+    bg.addColorStop(0, '#1b2a44');
+    bg.addColorStop(1, '#070d18');
+    ctx.fillStyle = bg;
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeStyle = hover ? '#fff0b3' : '#ffd166';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(b.x + 1, b.y + 1, b.w - 2, b.h - 2);
+    ctx.strokeStyle = '#ffd166';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(b.x + 9.5, b.y + 9.5, 18, 17);
+    ctx.fillStyle = '#ffd166';
+    ctx.fillRect(b.x + 17, b.y + 16, 2, 2);
+    if (hover) drawIconTooltip(b, 'Mapa');
+  }
+
+  // Peligrosidad de la zona: una unidad por cada bot vivo de otra empresa en el mapa, hasta 5
+  function dangerLevel() {
+    return Math.min(5, g.allies.filter(b => b.zi === g.zi && !b.dead && b.company !== g.p.company).length);
+  }
+
+  // Colores de los niveles de peligrosidad: de amarillo claro (1) a rojizo (5)
+  const DANGER_COLORS = ['#fff2a8', '#ffd84a', '#ffb13b', '#ff7a2e', '#e0392b'];
+
+  // Barra vertical de 5 niveles a la izquierda del mapa: se enciende un segmento por cada enemigo
+  function drawDangerBar() {
+    const { mx, my, mh } = minimapGeom();
+    const bx = mx - 14, lvl = dangerLevel(), gap = 3, segH = (mh - 4 * gap) / 5;
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 5; i++) {
+      const y = my + mh - (i + 1) * segH - i * gap;
+      ctx.fillStyle = i < lvl ? DANGER_COLORS[lvl - 1] : '#1b2a44';
+      ctx.fillRect(bx, y, 8, segH);
+      ctx.strokeStyle = '#5f6e84';
+      ctx.strokeRect(bx + 0.5, y + 0.5, 7, segH - 1);
+    }
+  }
+
   function drawMinimap() {
+    const win = minimapWinGeom();
+    ctx.save();
+    if (!g.mapOpen) { drawMapIcon(win); ctx.restore(); return; }
+    ctx.fillStyle = '#0b1424';
+    ctx.fillRect(win.x, win.y, win.w, win.h);
+    ctx.strokeStyle = '#ffd166';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(win.x + 0.5, win.y + 0.5, win.w - 1, win.h - 1);
+    // Cabecera: mapa actual a la izquierda, coordenadas de la nave a la izquierda del botón de cerrar
+    ctx.font = '13px Consolas, monospace';
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#ffd166';
+    ctx.fillText(`MAPA ${g.zone.id}`, win.x + 10, win.y + 22);
+    ctx.font = '12px Consolas, monospace';
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#cfe8ff';
+    ctx.fillText(`${Math.floor(g.p.x / MINI_UNIT)} / ${Math.floor(g.p.y / MINI_UNIT)}`, win.close.x - 8, win.y + 22);
+    ctx.fillStyle = '#5f6e84';
+    ctx.fillRect(win.x + 8, win.y + 30, win.w - 16, 1);
+    if (dangerBarShown()) drawDangerBar();
+    const c = win.close;
+    ctx.strokeStyle = '#cfe8ff';
+    ctx.beginPath();
+    ctx.moveTo(c.x + 5, c.y + 5); ctx.lineTo(c.x + c.w - 5, c.y + c.h - 5);
+    ctx.moveTo(c.x + c.w - 5, c.y + 5); ctx.lineTo(c.x + 5, c.y + c.h - 5);
+    ctx.stroke();
+
     const { mw, mh, mx, my, s, ox, oy } = minimapGeom();
     const z = g.zone;
     // Fondo del mapa actual, con los mismos colores que el fondo principal
@@ -3431,13 +3514,7 @@
       ctx.fill();
     }
 
-    // Mapa actual a la izquierda y coordenadas de la nave a la derecha, en unidades
-    ctx.fillStyle = '#cfe8ff';
-    ctx.font = '12px Consolas, monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText(z.id, mx, my - 8);
-    ctx.textAlign = 'right';
-    ctx.fillText(`${Math.floor(g.p.x / MINI_UNIT)} / ${Math.floor(g.p.y / MINI_UNIT)}`, mx + mw, my - 8);
+    ctx.restore();
   }
 
   function drawBackground() {
@@ -3576,6 +3653,15 @@
       }
       return;
     }
+    // Ventana del minimapa: el icono la abre; la X la cierra; la barra superior la arrastra.
+    // Dentro del mapa el clic sigue hasta el manejo del minimapa; en el resto de la ventana no hace nada
+    const mw_ = minimapWinGeom();
+    if (inBox(mw_, e.clientX, e.clientY)) {
+      if (!g.mapOpen) { g.mapOpen = true; return; }
+      if (inBox(mw_.close, e.clientX, e.clientY)) { g.mapOpen = false; return; }
+      if (e.clientY < mw_.y + 30) { g.drag = { key: 'mapPos', dx: e.clientX - mw_.x, dy: e.clientY - mw_.y }; return; }
+      if (!inBox(minimapGeom(), e.clientX, e.clientY)) return;
+    }
     // Ventana de usuario: el icono la abre; la X la cierra; la barra superior la arrastra
     const pw = playerGeom();
     if (inBox(pw, e.clientX, e.clientY)) {
@@ -3654,7 +3740,7 @@
 
     // Clic en el minimapa: la nave viaja al punto marcado. Cualquier otro clic lo cancela.
     const mm = minimapGeom();
-    if (e.clientX >= mm.mx && e.clientX <= mm.mx + mm.mw && e.clientY >= mm.my && e.clientY <= mm.my + mm.mh) {
+    if (g.mapOpen && e.clientX >= mm.mx && e.clientX <= mm.mx + mm.mw && e.clientY >= mm.my && e.clientY <= mm.my + mm.mh) {
       g.p.tx = clamp((e.clientX - mm.ox) / mm.s, 0, g.zone.w);
       g.p.ty = clamp((e.clientY - mm.oy) / mm.s, 0, g.zone.h);
       g.mmDest = { x: g.p.tx, y: g.p.ty };
@@ -3799,7 +3885,7 @@
       damage: p.damage, speed: p.speed, ammo: p.ammo, missile: p.missile,
       up: g.up, credits: g.credits, uridium: g.uridium, exp: g.exp, honor: g.honor,
       cargo: g.cargo, refine: g.refine, missions: g.missions, nextMission: g.nextMission, missionPos: g.missionPos,
-      playerId: g.playerId, playerPos: g.playerPos, navePos: g.navePos, refinePos: g.refinePos, teleportBonus: g.teleportBonus, lootKeys: g.lootKeys,
+      mapOpen: g.mapOpen, mapPos: g.mapPos, playerId: g.playerId, playerPos: g.playerPos, navePos: g.navePos, refinePos: g.refinePos, teleportBonus: g.teleportBonus, lootKeys: g.lootKeys,
       shipId: g.shipId, equip: g.equip, generators: g.generators, inv: g.inv, boost: g.boost,
       bots: g.allies.map(b => ({ name: b.name, zi: b.zi, x: b.x, y: b.y, exp: b.exp, honor: b.honor })),
       world: { ...g.world, [g.zone.id]: saveAliens(g.aliens) },
@@ -3837,6 +3923,8 @@
     if (d.missionPos) g.missionPos = d.missionPos;
     if (d.playerId) g.playerId = d.playerId;
     if (d.playerPos) g.playerPos = d.playerPos;
+    g.mapOpen = d.mapOpen !== false;
+    if (d.mapPos) g.mapPos = d.mapPos;
     if (d.navePos) g.navePos = d.navePos;
     if (d.refinePos) g.refinePos = d.refinePos;
     g.teleportBonus = d.teleportBonus || 0;
