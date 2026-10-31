@@ -52,6 +52,8 @@
   // Todos los mapas usan este tamaño salvo que se indique otro en su entrada de ZONES. Los límites son duros.
   const MINI_UNIT = 120;
   const MAP_W = 25200, MAP_H = 15600;
+  // Cuadrícula de portales: todos están a esta distancia de su esquina. Desde la superior izquierda; las demás esquinas la reflejan
+  const PORTAL_INSET = { x: 1800, y: 1733 };
 
   // Facciones: MMO (Marte, mapas 1-X), EIC (Tierra, 2-X) y VRU (Venus, 3-X).
   // Los mapas 1-X y 2-X se añadirán más adelante. El planeta se atenúa (alpha)
@@ -63,17 +65,47 @@
       base: { x: 23400, y: 13867, r: 250 },
       station: { x: 23472, y: 13816 },
       planet: { x: 19500, y: 4333, r: 700, alpha: 1 },
-      gates: { next: { x: 1800, y: 1733 } },
+      portals: [{ x: PORTAL_INSET.x, y: PORTAL_INSET.y, to: '3-2' }],
     },
     {
       id: '3-2', name: '3-2 · VRU', faction: 'VRU', w: MAP_W, h: MAP_H,
       bgTop: '#2a2a0c', bgBottom: '#0a0802',
-      base: { x: 1500, y: MAP_H / 2, r: 250 },
-      station: { x: 1572, y: MAP_H / 2 - 90 },
       planet: { x: 19500, y: 11556, r: 700, alpha: 1 },
-      gates: { prev: { x: 1800, y: 1733 } },
+      portals: [
+        { x: PORTAL_INSET.x, y: PORTAL_INSET.y, to: '3-4' },                       // superior izquierda
+        { x: MAP_W - PORTAL_INSET.x, y: PORTAL_INSET.y, to: '3-3' },               // superior derecha
+        { x: MAP_W - PORTAL_INSET.x, y: MAP_H - PORTAL_INSET.y, to: '3-1' },       // inferior derecha
+      ],
+    },
+    {
+      id: '3-3', name: '3-3 · VRU', faction: 'VRU', w: MAP_W, h: MAP_H,
+      bgTop: '#2a0c2a', bgBottom: '#080208',
+      // Sin base ni estación. Planeta provisional: pendiente de definir
+      planet: { x: 19500, y: 4333, r: 700, alpha: 1 },
+      portals: [
+        { x: PORTAL_INSET.x, y: PORTAL_INSET.y, to: '2-4' },                       // superior izquierda (bloqueado: 2-4 aún no existe)
+        { x: PORTAL_INSET.x, y: MAP_H - PORTAL_INSET.y, to: '3-4' },               // inferior izquierda
+        { x: MAP_W - PORTAL_INSET.x, y: MAP_H - PORTAL_INSET.y, to: '3-2' },       // inferior derecha
+      ],
+    },
+    {
+      id: '3-4', name: '3-4 · VRU', faction: 'VRU', w: MAP_W, h: MAP_H,
+      bgTop: '#0c1f2a', bgBottom: '#02070a',
+      // Sin base ni estación. Planeta decorativo, igual que en 3-3
+      planet: { x: 19500, y: 4333, r: 700, alpha: 1 },
+      portals: [
+        { x: PORTAL_INSET.x, y: PORTAL_INSET.y, to: '1-4' },                       // superior izquierda (bloqueado: 1-4 aún no existe)
+        { x: MAP_W - PORTAL_INSET.x, y: PORTAL_INSET.y, to: '3-3' },               // superior derecha
+        { x: MAP_W - PORTAL_INSET.x, y: MAP_H - PORTAL_INSET.y, to: '3-2' },       // inferior derecha
+        { x: MAP_W / 2, y: PORTAL_INSET.y, to: null },                             // superior central (bloqueado: destino a mapas altos aún sin definir)
+      ],
     },
   ];
+
+  // Sólo los mapas X1 y X8 tienen base (1-1, 2-1, 3-1, 1-8, 2-8, 3-8). En los demás no hay zona segura ni estación.
+  // Cuando la zona no tiene base, la nave reaparece en la base principal (3-1).
+  const MAIN_BASE = ZONES.find(z => z.id === '3-1').base;
+  const respawnPoint = () => g.zone.base || MAIN_BASE;
 
   // Niveles del jugador (32). PE necesaria para el nivel N = 10000 * 2^(N - 2); el nivel 1 empieza en 0 PE.
   // unlock: lo que se desbloquea al alcanzar el nivel (los modificadores de la derecha aún no se implementan)
@@ -333,7 +365,7 @@
     g.zone = ZONES[i];
     g.aliens = restoreAliens(g.world[g.zone.id]); g.bullets = []; g.enemyShots = []; g.pickups = []; g.parts = []; g.pems = [];
     const p = g.p;
-    const at = spawn || g.zone.base;
+    const at = spawn || respawnPoint();
     p.x = at.x; p.y = at.y;
     p.tx = null; p.ty = null; p.target = null; p.attacking = false;
     showBanner(g.zone.name);
@@ -342,7 +374,7 @@
   // Zona segura: la base y la zona alrededor del portal (su radio es mayor que el de cambio de mapa)
   function inSafeZone() {
     const p = g.p, z = g.zone;
-    if (dist(p.x, p.y, z.base.x, z.base.y) < z.base.r) return true;
+    if (z.base && dist(p.x, p.y, z.base.x, z.base.y) < z.base.r) return true;
     return !!portalInRange();
   }
 
@@ -351,17 +383,17 @@
     g.bannerText = text;
   }
 
-  // Puertas de la zona actual (gates.next lleva a la zona siguiente, gates.prev a la anterior).
-  // La nave aparece a 120 px de la puerta de enlace del destino, dentro de su zona segura.
+  // Puertas de la zona actual. Cada una lleva a la zona indicada en `to` (si todavía no existe, no se muestra).
+  // La nave aparece a 120 px de la puerta que lleva de vuelta a esta zona, dentro de su zona segura.
   function portalsOf(zi) {
-    const z = ZONES[zi], list = [];
-    if (z.gates.next) {
-      const to = ZONES[zi + 1];
-      list.push({ ...z.gates.next, to: zi + 1, spawn: { x: to.gates.prev.x + 120, y: to.gates.prev.y } });
-    }
-    if (z.gates.prev) {
-      const to = ZONES[zi - 1];
-      list.push({ ...z.gates.prev, to: zi - 1, spawn: { x: to.gates.next.x + 120, y: to.gates.next.y } });
+    const here = ZONES[zi].id, list = [];
+    for (const pt of ZONES[zi].portals) {
+      const to = ZONES.findIndex(z => z.id === pt.to);
+      if (to < 0) continue;
+      const back = ZONES[to].portals.find(b => b.to === here);
+      const b0 = ZONES[to].base || MAIN_BASE;
+      const spawn = back ? { x: back.x + 120, y: back.y } : { x: b0.x, y: b0.y };
+      list.push({ x: pt.x, y: pt.y, to, spawn });
     }
     return list;
   }
@@ -421,7 +453,7 @@
       x = rnd(200, z.w - 200);
       y = rnd(200, z.h - 200);
       tries++;
-    } while (dist(x, y, z.base.x, z.base.y) < SPAWN_SAFE && tries < 20);
+    } while (z.base && dist(x, y, z.base.x, z.base.y) < SPAWN_SAFE && tries < 20);
     const t = ALIEN[type];
     g.aliens.push({
       type, x, y, home: { x, y }, vx: 0, vy: 0,
@@ -850,7 +882,8 @@
       if (p.respawnT <= 0) {
         p.dead = false;
         p.hp = maxHpNow();
-        p.x = g.zone.base.x; p.y = g.zone.base.y; p.vx = 0; p.vy = 0;
+        const rp = respawnPoint();
+        p.x = rp.x; p.y = rp.y; p.vx = 0; p.vy = 0;
       }
     } else {
       updatePlayer(dt);
@@ -992,7 +1025,7 @@
 
   function updateAliens(dt) {
     const p = g.p, z = g.zone;
-    const atBase = dist(p.x, p.y, z.base.x, z.base.y) < z.base.r;
+    const atBase = !!z.base && dist(p.x, p.y, z.base.x, z.base.y) < z.base.r;
     for (const a of g.aliens) {
       const t = ALIEN[a.type];
       // Persiguen a su objetivo hasta que muere o, si es la nave, llega a la base (un portal cambia de mapa y limpia todo)
@@ -1145,7 +1178,7 @@
   }
 
   function respawnBot(b) {
-    const base = ZONES[b.zi].base;
+    const base = ZONES[b.zi].base || MAIN_BASE;
     b.dead = false; b.hp = b.maxHp;
     b.x = base.x; b.y = base.y; b.tx = b.x; b.ty = b.y;
     b.wait = 0; b.target = null; b.portal = false; b.hostile = !!b.enemy;
@@ -1167,7 +1200,9 @@
     const z = ZONES[b.zi], pts = portalsOf(b.zi);
     b.portal = !b.enemy && pts.length > 0 && Math.random() < 0.2;
     if (b.portal) {
-      b.tx = pts[0].x; b.ty = pts[0].y;
+      // Elige una de las puertas de la zona al azar
+      b.gate = pts[Math.floor(Math.random() * pts.length)];
+      b.tx = b.gate.x; b.ty = b.gate.y;
     } else {
       b.tx = rnd(600, z.w - 600); b.ty = rnd(600, z.h - 600);
     }
@@ -1175,9 +1210,11 @@
 
   // El bot cruza la puerta de su mapa y aparece junto a la del destino, igual que la nave
   function crossBotPortal(b) {
-    const pt = portalsOf(b.zi)[0];
+    const pts = portalsOf(b.zi);
+    const pt = b.gate || pts[Math.floor(Math.random() * pts.length)];
+    if (!pt) return;
     b.zi = pt.to; b.x = pt.spawn.x; b.y = pt.spawn.y;
-    b.tx = b.x; b.ty = b.y; b.portal = false; b.target = null;
+    b.tx = b.x; b.ty = b.y; b.portal = false; b.gate = null; b.target = null;
     b.wait = rnd(2, 5); b.hopT = rnd(30, 90);
   }
 
@@ -1335,19 +1372,21 @@
     ctx.strokeStyle = 'rgba(120,160,255,0.35)';
     ctx.lineWidth = 2;
     ctx.strokeRect(sx(0), sy(0), z.w, z.h);
-    const bx = sx(z.base.x), by = sy(z.base.y);
-    ctx.beginPath();
-    ctx.arc(bx, by, z.base.r, 0, Math.PI * 2);
-    ctx.setLineDash([8, 8]);
-    ctx.strokeStyle = 'rgba(93,255,138,0.5)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = '#5dff8a';
-    ctx.font = '12px Consolas, monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('BASE', bx, by - z.base.r - 8);
-    ctx.textAlign = 'left';
+    if (z.base) {
+      const bx = sx(z.base.x), by = sy(z.base.y);
+      ctx.beginPath();
+      ctx.arc(bx, by, z.base.r, 0, Math.PI * 2);
+      ctx.setLineDash([8, 8]);
+      ctx.strokeStyle = 'rgba(93,255,138,0.5)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#5dff8a';
+      ctx.font = '12px Consolas, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('BASE', bx, by - z.base.r - 8);
+      ctx.textAlign = 'left';
+    }
     for (const portal of portalsOf(g.zi)) {
       const x = sx(portal.x), y = sy(portal.y);
       ctx.save();
@@ -2311,7 +2350,7 @@
 
   function inBase() {
     const z = g.zone, p = g.p;
-    return dist(p.x, p.y, z.base.x, z.base.y) < z.base.r;
+    return !!z.base && dist(p.x, p.y, z.base.x, z.base.y) < z.base.r;
   }
 
   // Icono del hangar: solo se abre dentro de la base; fuera aparece apagado
@@ -2786,11 +2825,13 @@
       ctx.fillStyle = '#ffd166';
       ctx.fillRect(ox + portal.x * s - 2, oy + portal.y * s - 2, 4, 4);
     }
-    const base = z.base;
-    ctx.strokeStyle = 'rgba(140,255,170,0.8)';
-    ctx.beginPath();
-    ctx.arc(ox + base.x * s, oy + base.y * s, Math.max(2, base.r * s), 0, Math.PI * 2);
-    ctx.stroke();
+    if (z.base) {
+      const base = z.base;
+      ctx.strokeStyle = 'rgba(140,255,170,0.8)';
+      ctx.beginPath();
+      ctx.arc(ox + base.x * s, oy + base.y * s, Math.max(2, base.r * s), 0, Math.PI * 2);
+      ctx.stroke();
+    }
 
     // Líneas finas que marcan la posición del jugador; su cruce es la nave
     const px = ox + g.p.x * s, py = oy + g.p.y * s;
