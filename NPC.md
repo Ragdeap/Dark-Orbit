@@ -18,6 +18,11 @@ Estados: **Confirmado** = dato del usuario. **Provisional** = valor propio pendi
 | Boss Lordakia | 1-2, 2-2, 3-2 | 8000 | 8000 | 3200 exp, 16 honor, 3200 créditos, 8 uridium + caja | Vida, escudo, daño, recompensas y velocidad confirmados; alcance, detección, cadencia, radio y disparos provisionales |
 | Boss Streuner | 1-2, 2-2, 3-2 | 3200 | 1600 | 1600 exp, 8 honor, 1600 créditos, 4 uridium + caja | Vida, escudo, daño, recompensas y velocidad confirmados; alcance, detección, cadencia y tipo provisionales |
 | Boss Saimon | 1-3, 2-3, 3-3, 1-4, 2-4, 3-4 | 24000 | 12000 | 6400 exp, 32 honor, 6400 créditos, 16 uridium + caja | Vida, escudo, daño, mapas, recompensas, caja, velocidad y comportamiento confirmados; alcance, detección, cadencia, radio, forma y probabilidad de PEM provisionales |
+| Boss Mordon | 1-3, 2-3, 3-3 | 80000 | 40000 | 12800 exp, 64 honor, 25600 créditos, 32 uridium + caja | Vida, escudo, daño, mapas, recompensas, caja, velocidad y comportamiento confirmados; alcance, detección, cadencia, radio, forma y probabilidad del misil ralentizador provisionales |
+| Devolarium | 1-3, 2-3, 3-3 | 100000 | 100000 | 6400 exp, 32 honor, 51200 créditos, 16 uridium + caja | Vida, escudo, daño, mapas, recompensas, caja, velocidad y comportamiento confirmados; forma, radio, alcance, detección, cadencia y disparos provisionales |
+| Boss Devolarium | 1-3, 2-3, 3-3 | 400000 | 400000 | 26500 exp, 128 honor, 204800 créditos, 64 uridium + caja | Vida, escudo, daño, mapas, recompensas, caja, velocidad y comportamiento confirmados; forma, radio, alcance, detección, cadencia y disparos provisionales |
+| Sibelon | 1-4, 2-4, 3-4 | 200000 | 200000 | 12800 exp, 64 honor, 102400 créditos, 32 uridium + caja | Vida, escudo, daño, mapas, recompensas, caja, velocidad y comportamiento confirmados; forma, radio, alcance, detección, cadencia y disparos provisionales |
+| Boss Sibelon | 1-4, 2-4, 3-4 | 800000 | 800000 | 51000 exp, 1256 honor, 409600 créditos, 128 uridium + caja | Vida, escudo, daño, mapas, recompensas, caja, velocidad y comportamiento confirmados; forma, radio, alcance, detección, cadencia y disparos provisionales |
 
 ## Recompensas
 
@@ -34,6 +39,11 @@ Las recompensas son fijas y se otorgan al destruir al NPC.
 | Boss Lordakia | 3200 | 16 | 3200 | 8 | 80 Prometium + 80 Terbium + 80 Endurium + 10 Prometid + 1 Xenomita |
 | Boss Streuner | 1600 | 8 | 1600 | 4 | 40 Prometium + 10 Terbium + 40 Endurium |
 | Boss Saimon | 6400 | 32 | 6400 | 16 | 160 Prometium + 160 Terbium + 160 Endurium + 8 Prometid + 8 Duranium + 1 Promerium + 2 Xenomita |
+| Boss Mordon | 12800 | 64 | 25600 | 32 | 320 Prometium + 320 Terbium + 320 Endurium + 32 Prometid + 32 Duranium + 8 Promerium + 8 Xenomita |
+| Devolarium | 6400 | 32 | 51200 | 16 | 100 Prometium + 100 Terbium + 100 Endurium + 16 Prometid + 16 Duranium + 2 Promerium |
+| Boss Devolarium | 26500 | 128 | 204800 | 64 | 400 Prometium + 400 Terbium + 400 Endurium + 64 Prometid + 64 Duranium + 8 Promerium + 8 Xenomita |
+| Sibelon | 12800 | 64 | 102400 | 32 | 200 Prometium + 200 Terbium + 200 Endurium + 32 Prometid + 32 Duranium + 4 Promerium |
+| Boss Sibelon | 51000 | 1256 | 409600 | 128 | 800 Prometium + 800 Terbium + 800 Endurium + 128 Prometid + 128 Duranium + 16 Promerium + 32 Xenomita |
 
 - **Caja de carga:** es garantizada. Cada NPC que tiene caja en su ficha la suelta siempre al morir, con la cantidad indicada. Aparece en el lugar donde murió el NPC y desaparece si no se recoge. Hay que hacer clic sobre ella: la nave viaja hasta la caja y la recoge al llegar, sumando al inventario exactamente las materias que indica la ficha de ese NPC.
 - Los datos de Recruit, Aider y Lordakia son provisionales y tienen que confirmarse.
@@ -49,6 +59,11 @@ Cantidad de cada materia en la caja de carga del NPC. El orden es el de la tabla
 | Aider Streuner | 15 | 0 | 15 | 0 | 0 | 0 |
 | Boss Streuner | 40 | 40 | 10 | 0 | 0 | 0 |
 | Boss Saimon | 160 | 160 | 160 | 8 | 8 | 1 |
+| Boss Mordon | 320 | 320 | 320 | 32 | 32 | 8 |
+| Devolarium | 100 | 100 | 100 | 16 | 16 | 2 |
+| Boss Devolarium | 400 | 400 | 400 | 64 | 64 | 8 |
+| Sibelon | 200 | 200 | 200 | 32 | 32 | 4 |
+| Boss Sibelon | 800 | 800 | 800 | 128 | 128 | 16 |
 | Lordakia | 20 | 20 | 20 | 0 | 0 | 0 |
 | Boss Lordakia | 80 | 80 | 80 | 10 | 0 | 0 |
 | Mordon | 80 | 80 | 80 | 8 | 8 | 1 |
@@ -56,7 +71,7 @@ Cantidad de cada materia en la caja de carga del NPC. El orden es el de la tabla
 
 ### Materias de refinamiento
 
-- **Xenomita:** la sueltan el Boss Lordakia (1 unidad) y el Boss Saimon (2 unidades). No ocupa espacio en la bodega, su almacenamiento es ilimitado y no se puede vender. Sirve como materia prima para mejorar otras materias mediante el refinamiento (pendiente de definir).
+- **Xenomita:** la sueltan el Boss Lordakia (1 unidad), el Boss Saimon (2 unidades), el Boss Mordon (8 unidades), el Boss Devolarium (8 unidades) y el Boss Sibelon (32 unidades). No ocupa espacio en la bodega, su almacenamiento es ilimitado y no se puede vender. Sirve como materia prima para mejorar otras materias mediante el refinamiento (pendiente de definir).
 - En el código se guarda en su propio almacén (`refine`), separado de la bodega y de la estación de venta.
 
 ## Estadísticas completas
@@ -71,6 +86,11 @@ Cantidad de cada materia en la caja de carga del NPC. El orden es el de la tabla
 | Saimon | 30 | 320 | 200 | 480 | 600 | 1.8 | 2 | Hexágono |
 | Boss Streuner | 26 | 250 | 100 | 300 | 350 | 1.6 | 2 | Cuadrado |
 | Boss Saimon | 36 | 300 | 800 | 480 | 600 | 1.8 | 2 | Hexágono |
+| Boss Mordon | 36 | 150 | 1500 | 420 | 520 | 2.2 | 3 (abanico) | Octágono |
+| Devolarium | 40 | 200 | 1200 | 420 | 520 | 2.2 | 3 (abanico) | Pentágono |
+| Boss Devolarium | 48 | 160 | 4650 | 420 | 520 | 2.2 | 3 (abanico) | Pentágono |
+| Sibelon | 40 | 100 | 2650 | 420 | 520 | 2.2 | 3 (abanico) | Hexágono |
+| Boss Sibelon | 52 | 175 | 12350 | 420 | 520 | 2.2 | 3 (abanico) | Hexágono |
 | Boss Lordakia | 26 | 280 | 320 | 320 | 450 | 1.2 | 2 | Triángulo |
 
 - **Radio:** tamaño visual y de colisión.
@@ -115,7 +135,8 @@ Cantidad de cada materia en la caja de carga del NPC. El orden es el de la tabla
 - Mordon aparece en X3 y X4 (1-3, 2-3, 3-3, 1-4, 2-4, 3-4); esos mapas aún no existen en el juego.
 - **Tipo:** agresivo, confirmado. Ataca en cuanto la nave entra en su detección (520) y persigue tras recibir daño.
 
-### Mordon: misil ralentizador
+### Mordon y Boss Mordon: misil ralentizador
+- Boss Mordon tiene el mismo comportamiento que Mordon, con una probabilidad de misil ralentizador mayor: 40 % (provisional) frente al 20 % de Mordon. Ambos tienen una única tirada por combate.
 - Hay una única tirada por combate, con un 20 % de probabilidad (provisional), en el primer disparo del combate. Si sale, lanza un único misil ralentizador en lugar del abanico de 3 disparos. Si no sale, no vuelve a intentarlo hasta el siguiente combate.
 - El misil **no hace daño**. Si impacta en la nave, reduce su velocidad a la mitad durante 5 segundos (provisional). Volver a impactar renueva el tiempo. Puede fallar igual que un disparo normal, y un fallo no frena la nave. Atraviesa a los bots.
 - Un combate termina cuando Mordon pierde su objetivo (muere la nave o el objetivo, o la nave llega a la base). Después, la tirada vuelve a estar disponible. No se guarda al cambiar de mapa ni al cerrar el juego.
@@ -146,5 +167,10 @@ Cantidad de cada materia en la caja de carga del NPC. El orden es el de la tabla
 - Alcance y cadencia de Recruit Streuner y Aider Streuner. Su daño máximo ya está confirmado (40 y 70). La velocidad de Streuner (280) y Recruit Streuner (270) ya está confirmada.
 - Alcance, detección y cadencia de Mordon.
 - Boss Saimon: radio (36), forma (hexágono), alcance (480), detección (600), cadencia (1.8 s), disparos (2) y probabilidad de PEM (50 %, provisional). No confirmados.
+- Boss Mordon: radio (36), alcance (420), detección (520), cadencia (2.2 s), disparos (3) y probabilidad del misil ralentizador (40 %, provisional). No confirmados. Su mapa son sólo 1-3, 2-3 y 3-3 (X3), según indicaste.
+- Devolarium: forma (pentágono), radio (40), alcance (420), detección (520), cadencia (2.2 s) y disparos (3), copiados de Mordon y provisionales. No confirmados. No tiene misil ralentizador ni huida definidos.
+- Boss Devolarium: forma (pentágono), radio (48), alcance (420), detección (520), cadencia (2.2 s) y disparos (3), copiados de Mordon y provisionales. No confirmados. No tiene misil ralentizador ni huida definidos.
+- Sibelon: forma (hexágono), radio (40), alcance (420), detección (520), cadencia (2.2 s) y disparos (3), copiados de Mordon y provisionales. No confirmados. No tiene misil ralentizador ni huida definidos. Sus mapas son X4 (1-4, 2-4 y 3-4).
+- Boss Sibelon: forma (hexágono), radio (52), alcance (420), detección (520), cadencia (2.2 s) y disparos (3), copiados de Mordon y provisionales. No confirmados. No tiene misil ralentizador ni huida definidos. Sus mapas son X4 (1-4, 2-4 y 3-4).
 - Probabilidad (20 %), duración (5 s) y reducción de velocidad (50 %) del misil ralentizador de Mordon.
 - Equilibrio general: el láser LF-1 (12 de daño) tarda mucho en vaciar a los NPC del 3-1.
