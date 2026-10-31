@@ -1002,6 +1002,7 @@
 
   // Rayo verde del Aider hacia el escolta que está curando
   function drawAiderBeams() {
+    ctx.save();
     for (const a of g.aliens) {
       if (!ALIEN[a.type].escort) continue;
       const link = healTarget(a);
@@ -1013,6 +1014,7 @@
       ctx.lineWidth = 2;
       ctx.stroke();
     }
+    ctx.restore();
   }
 
   // Velocidad de un NPC. El Aider iguala la de su escolta; sin escolta se queda quieto
@@ -1349,12 +1351,16 @@
   }
 
   function bar(x, y, w, h, ratio, color) {
+    // El contorno depende de lineWidth: se fija aquí para no heredar el de la última figura dibujada
+    ctx.save();
+    ctx.lineWidth = 1;
     ctx.fillStyle = 'rgba(255,255,255,0.12)';
     ctx.fillRect(x, y, w, h);
     ctx.fillStyle = color;
     ctx.fillRect(x, y, w * clamp(ratio, 0, 1), h);
     ctx.strokeStyle = 'rgba(255,255,255,0.35)';
     ctx.strokeRect(x + 0.5, y + 0.5, w, h);
+    ctx.restore();
   }
 
   function drawStars() {
@@ -1416,6 +1422,7 @@
       const x = sx(a.x), y = sy(a.y);
       const rot = Math.atan2(p.y - a.y, p.x - a.x);
       const flash = a.hit > 0;
+      ctx.save();
       drawPoly(x, y, rot, polyPts(t.sides, t.r), flash ? '#ffffff' : t.color, '#ffffff22');
       if (a.hp < t.hp || a.aggro) bar(x - 18, y - t.r - 10, 36, 4, a.hp / t.hp, '#5dff8a');
       if (a.shield > 0 && a.shield < t.shield) bar(x - 18, y - t.r - 15, 36, 3, a.shield / t.shield, '#5ac8ff');
@@ -1431,12 +1438,13 @@
       ctx.font = '11px Consolas, monospace';
       ctx.textAlign = 'center';
       ctx.fillText(`..::{ ${t.name} }::..`, x, y + t.r + 22);
-      ctx.textAlign = 'left';
+      ctx.restore();
     }
   }
 
   // Bots aliados: triángulo verde con su nombre y nivel. No están en g.aliens, así que no son objetivos
   function drawAllies() {
+    ctx.save();
     for (const b of g.allies) {
       if (b.zi !== g.zi || b.dead) continue;
       const x = sx(b.x), y = sy(b.y);
@@ -1470,6 +1478,7 @@
       drawCompany(b.company, x + nameW / 2 + 4, y + 16 + 22 - 6);
       ctx.textAlign = 'left';
     }
+    ctx.restore();
   }
 
   function drawPickups() {
@@ -1487,6 +1496,7 @@
   }
 
   function drawProjectiles() {
+    ctx.save();
     for (const b of g.bullets) {
       const x = sx(b.x), y = sy(b.y);
       if (b.homing) {
@@ -1520,6 +1530,7 @@
         ctx.fill();
       }
     }
+    ctx.restore();
   }
 
   function drawTexts() {
