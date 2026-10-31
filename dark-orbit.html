@@ -291,6 +291,7 @@
   // Sirven de materia prima para mejorar otras materias mediante el refinamiento
   const REFINE_MATERIALS = [
     { key: 'xenomita', name: 'Xenomita' },
+    { key: 'seprom', name: 'Seprom' },
   ];
   // Recetas: unidades de cada materia base que hacen falta para fabricar una unidad de la refinada
   const REFINE_RECIPES = {
@@ -298,6 +299,23 @@
     duranium: { terbium: 20, endurium: 10 },
     promerium: { prometid: 10, duranium: 10, xenomita: 1 },
   };
+  // Materias refinadas que se arrastran a las categorías de mejora, con su color
+  const MEJORAR_REFINED = [
+    { name: 'Prometid', key: 'prometid', color: '#ff7ad9' },
+    { name: 'Duranium', key: 'duranium', color: '#6fe39a' },
+    { name: 'Promerium', key: 'promerium', color: '#ffa640' },
+    { name: 'Seprom', key: 'seprom', color: '#b07cff' },
+  ];
+  // Mejora temporal de cada materia por categoría (fracción sobre el valor base). Lo que no esté aquí no se puede aplicar
+  const BOOST = {
+    prometid: { lasers: 0.10, missiles: 0.10 },
+    duranium: { shield: 0.10 },
+    promerium: { lasers: 0.20, missiles: 0.20, shield: 0.20, engine: 0.10 },
+    seprom: { lasers: 0.60, missiles: 0.60, shield: 0.60 },
+  };
+  const BOOST_SLOTS = ['lasers', 'missiles', 'engine', 'shield'];
+  // Cada unidad aplicada da 10 disparos (láseres y misiles) o 600 segundos, es decir 10 minutos (motor y escudo)
+  const BOOST_PER_UNIT = { lasers: 10, missiles: 10, engine: 600, shield: 600 };
 
   // title: nombre destacado; description: historia de la misión (textos provisionales)
   const MISSIONS = [
@@ -336,6 +354,7 @@
       playerOpen: false, playerPos: null, playerId: String(Math.floor(10000000 + Math.random() * 90000000)),
       teleportBonus: 0, lootKeys: 0,
       safeT: 0, wasSafe: false, clock: 0, lastSpot: -Infinity,
+      boost: Object.fromEntries(BOOST_SLOTS.map(s => [s, { key: null, left: 0 }])),
       shipId: 'PHOENIX',
       equip: { PHOENIX: ['LF1'] },
       generators: {},
@@ -724,12 +743,13 @@
 
   // Escudo total de los generadores equipados y su porcentaje de absorción (se toma el mayor)
   function shieldStats() {
-    return genOf().reduce((s, id) => {
+    const st = genOf().reduce((s, id) => {
       if (!id) return s;
       s.max += GENERATORS[id].shield;
       s.absorb = Math.max(s.absorb, GENERATORS[id].absorb);
       return s;
     }, { max: 0, absorb: 0 });
+    return { max: st.max * (1 + boostBonus('shield')), absorb: st.absorb };
   }
 
   // Tras cambiar generadores: la capacidad nueva se llena al equipar y la reserva se ajusta al máximo
@@ -962,10 +982,11 @@
       g.bullets.push({
         x: p.x + Math.cos(ang) * 18, y: p.y + Math.sin(ang) * 18,
         vx: Math.cos(ang) * a.speed, vy: Math.sin(ang) * a.speed,
-        life: a.life, dmg: Math.floor(laserDamage(target) * rnd(0.9, 1) * a.mult), color: a.color,
+        life: a.life, dmg: Math.floor(laserDamage(target) * rnd(0.9, 1) * a.mult * (1 + boostBonus('lasers'))), color: a.color,
         target,
       });
     }
+    spendBoost('lasers', 1);
   }
 
   // Dispara el misil seleccionado contra el NPC fijado (teledirigido). Igual que los láseres, necesita
@@ -983,9 +1004,10 @@
     g.bullets.push({
       x: p.x + Math.cos(ang) * 18, y: p.y + Math.sin(ang) * 18,
       vx: Math.cos(ang) * m.speed, vy: Math.sin(ang) * m.speed,
-      life: m.life, dmg: m.dmg, color: m.color, missile: true,
+      life: m.life, dmg: Math.floor(m.dmg * (1 + boostBonus('missiles'))), color: m.color, missile: true,
       homing: true, turn: 5, target: t,
     });
+    spendBoost('missiles', 1);
   }
 
   function buyUpgrade(u) {
@@ -1007,6 +1029,7 @@
     while (g.aliens.length < ALIEN_CAP && types.length) spawnAlien(types);
 
     if (!p.dead) updatePlayer(dt);
+    tickBoosts(dt);
 
     // Protección de llegada: se corta al salir del anillo. El combate se agota solo y devuelve la protección
     if (p.spawnT > 0 && !inNaz()) p.spawnT = 0;
@@ -1059,7 +1082,7 @@
 
     // Movimiento libre hacia el punto de clic, también mientras se ataca
     // Con el efecto del misil ralentizador, la velocidad baja durante unos segundos
-    const sp = p.slowT > 0 ? p.speed * p.slowF : p.speed;
+    const sp = (p.slowT > 0 ? p.speed * p.slowF : p.speed) * (1 + boostBonus('engine'));
     let wx = 0, wy = 0;
     if (p.tx !== null) {
       const dx = p.tx - p.x, dy = p.ty - p.y, d = Math.hypot(dx, dy);
@@ -2230,7 +2253,7 @@
     // Columna derecha: tonelaje, velocidad máxima y configuración (sin implementar: 1)
     const right = [
       { kind: 'cargo', frac: cargo / cap, value: `${formatNum(cargo)} / ${formatNum(cap)}` },
-      { kind: 'speed', frac: null, value: formatNum(Math.round(p.speed)) },
+      { kind: 'speed', frac: null, value: formatNum(Math.round(p.speed * (1 + boostBonus('engine')))) },
       { kind: 'config', frac: null, value: '1' },
     ];
     const rowY = i => b.y + 50 + i * 21;
@@ -2547,7 +2570,7 @@
     ['prometium', 'prometid'], ['endurium', 'prometid'], ['endurium', 'duranium'], ['terbium', 'duranium'],
     ['prometid', 'promerium'], ['duranium', 'promerium'], ['xenomita', 'promerium'],
   ];
-  const REF_TABS = [{ id: 'refine', label: 'Refinamiento' }, { id: 'level', label: 'Subir de nivel' }];
+  const REF_TABS = [{ id: 'refine', label: 'Refinamiento' }, { id: 'improve', label: 'Mejorar' }];
 
   // Cantidad de una materia: el almacén ilimitado para las de refinamiento, la bodega para el resto
   const stockOf = key => (key in g.refine ? g.refine[key] : g.cargo[key]);
@@ -2561,6 +2584,107 @@
     for (const [k, n] of Object.entries(REFINE_RECIPES[key])) setStock(k, stockOf(k) - n);
     setStock(key, stockOf(key) + 1);
     saveGame();
+  }
+
+  // Mejora temporal activa de una categoría: 0 si no queda nada
+  function boostBonus(slot) {
+    const b = g.boost[slot];
+    return b.left > 0 ? BOOST[b.key][slot] : 0;
+  }
+
+  // Descuenta lo gastado (un disparo o los segundos transcurridos); al llegar a 0 la materia deja de aplicarse
+  function spendBoost(slot, amount) {
+    const b = g.boost[slot];
+    if (b.left <= 0) return;
+    b.left = Math.max(0, b.left - amount);
+    if (b.left === 0) b.key = null;
+  }
+
+  // Motor y escudo gastan tiempo real; al acabarse el escudo se recalcula su capacidad
+  function tickBoosts(dt) {
+    const shieldOn = g.boost.shield.left > 0;
+    spendBoost('engine', dt);
+    spendBoost('shield', dt);
+    if (shieldOn && g.boost.shield.left === 0) refreshShield();
+  }
+
+  // Arrastra una materia refinada a una categoría: consume una unidad y suma su tiempo o disparos.
+  // Si la categoría tiene otra materia activa, pide confirmación; al confirmar (replace), se pierde lo que quedaba
+  function applyBoost(key, slot, replace = false) {
+    if (BOOST[key][slot] === undefined) { showBanner('Esa materia no se puede aplicar aquí'); return; }
+    if (stockOf(key) < 1) return;
+    const b = g.boost[slot];
+    if (b.left > 0 && b.key !== key && !replace) { g.confirmBoost = { key, slot }; return; }
+    setStock(key, stockOf(key) - 1);
+    if (b.key !== key) b.left = 0;
+    b.key = key;
+    b.left += BOOST_PER_UNIT[slot];
+    if (slot === 'shield') refreshShield();
+    saveGame();
+  }
+
+  // Posiciones de la pestaña Mejorar: materias refinadas (origen del arrastre) y categorías (destino)
+  function mejorarGeom(b) {
+    const x0 = b.x + 26;
+    return {
+      x0,
+      refined: MEJORAR_REFINED.map((c, i) => ({ ...c, x: x0 + i * 117, y: b.y + 262, w: 96, h: 100 })),
+      slots: BOOST_SLOTS.map((slot, i) => ({ slot, x: x0 + i * 117, y: b.y + 388, w: 96, h: 64 })),
+    };
+  }
+
+  // Clave de la materia refinada bajo el cursor, si hay stock para arrastrarla
+  function mejorarSourceAt(b, x, y) {
+    const c = mejorarGeom(b).refined.find(r => inBox(r, x, y));
+    return c && stockOf(c.key) > 0 ? c.key : null;
+  }
+
+  // Categoría bajo el cursor
+  function mejorarSlotAt(b, x, y) {
+    const s = mejorarGeom(b).slots.find(r => inBox(r, x, y));
+    return s ? s.slot : null;
+  }
+
+  // Contador de una categoría: disparos en láseres y misiles, minutos en motor y escudo
+  function boostLabel(slot) {
+    const left = g.boost[slot].left;
+    if (slot === 'lasers' || slot === 'missiles') return `${formatNum(Math.floor(left))} disparos`;
+    return `${formatNum(Math.floor(left / 60))} min.`;
+  }
+
+  const BOOST_SLOT_NAMES = { lasers: 'Láseres', missiles: 'Misiles', engine: 'Motor', shield: 'Escudo' };
+
+  // Ventana de confirmación al sustituir una materia activa, centrada en la pantalla
+  function confirmBoostGeom() {
+    const w = 380, h = 130, x = (W - w) / 2, y = (H - h) / 2;
+    return { x, y, w, h, yes: { x: x + w - 170, y: y + h - 40, w: 70, h: 26 }, no: { x: x + w - 90, y: y + h - 40, w: 70, h: 26 } };
+  }
+
+  function drawBoostConfirm() {
+    if (!g.confirmBoost) return;
+    const { key, slot } = g.confirmBoost, d = confirmBoostGeom(), b = g.boost[slot];
+    ctx.save();
+    ctx.fillStyle = '#0b1424';
+    ctx.fillRect(d.x, d.y, d.w, d.h);
+    ctx.strokeStyle = '#ffd166';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(d.x + 0.5, d.y + 0.5, d.w - 1, d.h - 1);
+    ctx.font = '12px Consolas, monospace';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#cfe8ff';
+    ctx.fillText(`${BOOST_SLOT_NAMES[slot]} tiene ${materialName(b.key)} activo.`, d.x + 16, d.y + 30);
+    ctx.fillText(`Si continúas se perderán sus ${boostLabel(slot)}`, d.x + 16, d.y + 50);
+    ctx.fillText(`y se aplicará ${materialName(key)}. ¿Quieres sustituirlo?`, d.x + 16, d.y + 70);
+    for (const [btn, text] of [[d.yes, 'Sí'], [d.no, 'No']]) {
+      ctx.fillStyle = '#1b2a44';
+      ctx.fillRect(btn.x, btn.y, btn.w, btn.h);
+      ctx.strokeStyle = '#5f6e84';
+      ctx.strokeRect(btn.x + 0.5, btn.y + 0.5, btn.w - 1, btn.h - 1);
+      ctx.fillStyle = '#ffd166';
+      ctx.textAlign = 'center';
+      ctx.fillText(text, btn.x + btn.w / 2, btn.y + 18);
+    }
+    ctx.restore();
   }
 
   function refineGeom() {
@@ -2662,6 +2786,79 @@
     ctx.restore();
   }
 
+  // Tarjeta de materia de la pestaña Mejorar. Las dim no están implementadas y se muestran apagadas
+  function drawMejorarCard(x, y, w, c) {
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#1b2a44';
+    ctx.fillRect(x, y, w, 20);
+    ctx.fillStyle = c.dim ? '#5f6e84' : '#ffffff';
+    ctx.font = 'bold 12px Consolas, monospace';
+    ctx.fillText(c.name, x + w / 2, y + 14);
+    ctx.fillStyle = '#10192b';
+    ctx.fillRect(x, y + 20, w, 60);
+    drawGem(x + w / 2, y + 50, c.dim ? '#3a4658' : c.color, 0.8, c.star);
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(x, y + 80, w, 20);
+    ctx.fillStyle = c.dim ? '#5f6e84' : '#ffffff';
+    ctx.font = 'bold 12px Consolas, monospace';
+    ctx.fillText(c.dim ? '—' : formatNum(stockOf(c.key)), x + w / 2, y + 95);
+    ctx.restore();
+  }
+
+  // Categoría de mejora: icono, casilla y contador. Se resalta cuando una materia compatible pasa por encima
+  function drawMejorarUpgrade(s, draw, label, hl) {
+    const { x, y, w } = s;
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#10192b';
+    ctx.fillRect(x, y, w, 64);
+    ctx.strokeStyle = hl ? '#ffd166' : '#5f6e84';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 63);
+    draw(x + w / 2, y + 32);
+    ctx.strokeRect(x + 6.5, y + 46.5, 14, 14);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '12px Consolas, monospace';
+    ctx.fillText(label, x + w / 2, y + 82);
+    ctx.restore();
+  }
+
+  // Pestaña Mejorar: materias primas, materias refinadas y categorías de mejora de la nave
+  function drawMejorarTab(b) {
+    const geom = mejorarGeom(b), x0 = geom.x0;
+    ctx.save();
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#9fb3c8';
+    ctx.font = '12px Consolas, monospace';
+    ctx.fillText('Materias primas:', x0, b.y + 96);
+    const raw = [
+      { name: 'Prometium', key: 'prometium', color: '#ff5a3c' },
+      { name: 'Endurium', key: 'endurium', color: '#7fe7ff' },
+      { name: 'Terbium', key: 'terbium', color: '#ffe066' },
+      { name: 'Xenomita', key: 'xenomita', color: '#cfe9ff', star: true },
+      { name: 'Paladio', dim: true },
+    ];
+    raw.forEach((c, i) => drawMejorarCard(x0 + i * 92, b.y + 104, 80, c));
+    ctx.fillStyle = '#9fb3c8';
+    ctx.font = '11px Consolas, monospace';
+    ctx.fillText('Con arrastrar y soltar puedes equipar rápidamente tus artículos:', x0, b.y + 224);
+    ctx.fillText('Arrastra la materia prima sobre el artículo deseado.', x0, b.y + 240);
+    geom.refined.forEach(c => drawMejorarCard(c.x, c.y, c.w, c));
+    const icons = {
+      lasers: (cx, cy) => drawLaserIcon(cx, cy),
+      missiles: (cx, cy) => drawMissileIcon(cx, cy),
+      engine: (cx, cy) => drawNaveRowIcon('speed', cx, cy),
+      shield: (cx, cy) => drawNaveRowIcon('shield', cx, cy),
+    };
+    const hovered = g.matDrag ? mejorarSlotAt(b, g.matDrag.x, g.matDrag.y) : null;
+    geom.slots.forEach(s => {
+      const hl = s.slot === hovered && BOOST[g.matDrag.key][s.slot] !== undefined;
+      drawMejorarUpgrade(s, icons[s.slot], boostLabel(s.slot), hl);
+    });
+    ctx.restore();
+  }
+
   function drawRefineWindow() {
     const b = refineGeom();
     ctx.save();
@@ -2702,11 +2899,10 @@
       drawRefineLinks(b);
       for (const key of Object.keys(REF_CARDS)) drawRefineCard(b, key);
     } else {
-      ctx.fillStyle = '#8fa0b8';
-      ctx.font = '13px Consolas, monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('Próximamente', b.x + b.w / 2, b.y + b.h / 2);
+      drawMejorarTab(b);
     }
+    // Materia que se está arrastrando: sigue al cursor hasta soltarla
+    if (g.matDrag) drawGem(g.matDrag.x, g.matDrag.y, MEJORAR_REFINED.find(c => c.key === g.matDrag.key).color, 0.8);
     ctx.restore();
   }
 
@@ -3321,6 +3517,7 @@
     drawPlayerWindow();
     drawNaveWindow();
     drawRefineWindow();
+    drawBoostConfirm();
     drawHangarIcon(hangarIconGeom());
     drawActionBar();
     drawSafeMsg();
@@ -3346,6 +3543,13 @@
   canvas.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
   canvas.addEventListener('contextmenu', e => e.preventDefault());
   canvas.addEventListener('mousedown', e => {
+    // Confirmación de sustitución: mientras esté abierta, solo responden sus botones
+    if (g.confirmBoost) {
+      const d = confirmBoostGeom(), c = g.confirmBoost;
+      if (inBox(d.yes, e.clientX, e.clientY)) { g.confirmBoost = null; applyBoost(c.key, c.slot, true); }
+      else if (inBox(d.no, e.clientX, e.clientY)) g.confirmBoost = null;
+      return;
+    }
     // Nave destruida: solo el menú de reaparición responde a los clics
     if (g.p.dead) { const i = reviveIndexAt(e.clientX, e.clientY); if (i >= 0) revive(reviveOptions()[i].id); return; }
     if (g.hangar.open) { hangarClick(e.clientX, e.clientY); return; }
@@ -3396,8 +3600,10 @@
       else {
         const tab = REF_TABS.find((t, i) => inBox(refineTabGeom(rw, i), e.clientX, e.clientY));
         const key = g.refineTab === 'refine' ? Object.keys(REFINE_RECIPES).find(k => inBox(refineCardGeom(rw, k).btn, e.clientX, e.clientY)) : null;
+        const src = g.refineTab === 'improve' ? mejorarSourceAt(rw, e.clientX, e.clientY) : null;
         if (tab) g.refineTab = tab.id;
         else if (key) refine(key);
+        else if (src) g.matDrag = { key: src, x: e.clientX, y: e.clientY };
         else if (e.clientY < rw.y + 30) g.drag = { key: 'refinePos', dx: e.clientX - rw.x, dy: e.clientY - rw.y };
       }
       return;
@@ -3482,10 +3688,17 @@
   addEventListener('mousemove', e => {
     if (g.drag) g[g.drag.key] = { x: e.clientX - g.drag.dx, y: e.clientY - g.drag.dy };
     if (g.barDrag) { g.barDrag.x = e.clientX; g.barDrag.y = e.clientY; }
+    if (g.matDrag) { g.matDrag.x = e.clientX; g.matDrag.y = e.clientY; }
   });
 
   addEventListener('mouseup', e => {
     g.drag = null;
+    // Soltar una materia refinada sobre una categoría de la pestaña Mejorar la aplica; en otro sitio se cancela
+    if (g.matDrag) {
+      const slot = g.refineOpen ? mejorarSlotAt(refineGeom(), e.clientX, e.clientY) : null;
+      if (slot) applyBoost(g.matDrag.key, slot);
+      g.matDrag = null;
+    }
     if (g.barDrag) { dropBarItem(e.clientX, e.clientY); return; }
     if (!mouse.holding) return;
     mouse.holding = false;
@@ -3587,7 +3800,7 @@
       up: g.up, credits: g.credits, uridium: g.uridium, exp: g.exp, honor: g.honor,
       cargo: g.cargo, refine: g.refine, missions: g.missions, nextMission: g.nextMission, missionPos: g.missionPos,
       playerId: g.playerId, playerPos: g.playerPos, navePos: g.navePos, refinePos: g.refinePos, teleportBonus: g.teleportBonus, lootKeys: g.lootKeys,
-      shipId: g.shipId, equip: g.equip, generators: g.generators, inv: g.inv,
+      shipId: g.shipId, equip: g.equip, generators: g.generators, inv: g.inv, boost: g.boost,
       bots: g.allies.map(b => ({ name: b.name, zi: b.zi, x: b.x, y: b.y, exp: b.exp, honor: b.honor })),
       world: { ...g.world, [g.zone.id]: saveAliens(g.aliens) },
       bar: g.bar,
@@ -3614,6 +3827,12 @@
     g.up = d.up; g.credits = d.credits; g.uridium = d.uridium; g.exp = d.exp; g.honor = d.honor;
     g.cargo = { ...g.cargo, ...d.cargo };
     g.refine = { ...g.refine, ...d.refine };
+    // Mejoras temporales: si la materia guardada ya no vale para su categoría, la categoría queda vacía
+    if (d.boost) g.boost = { ...g.boost, ...d.boost };
+    for (const s of BOOST_SLOTS) {
+      const k = g.boost[s].key;
+      if (!BOOST[k] || BOOST[k][s] === undefined) g.boost[s] = { key: null, left: 0 };
+    }
     if (Array.isArray(d.missions)) { g.missions = d.missions; g.nextMission = d.nextMission; }
     if (d.missionPos) g.missionPos = d.missionPos;
     if (d.playerId) g.playerId = d.playerId;
