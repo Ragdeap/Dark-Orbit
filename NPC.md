@@ -9,9 +9,9 @@ Estados: **Confirmado** = dato del usuario. **Provisional** = valor propio pendi
 
 | NPC | Mapas | Vida | Escudo | Recompensas | Estado |
 |---|---|---|---|---|---|
-| Streuner | 1-1, 1-2, 2-1, 2-2, 3-1, 3-2 | 800 | 400 | Ver tabla de recompensas | Vida, escudo y recompensas confirmados; velocidad y alcance provisionales |
-| Recruit Streuner | 1-1, 1-2, 2-1, 2-2, 3-1, 3-2 | 600 | 800 | 500 exp, 3 honor, 500 créditos, 2 uridium + caja | Vida, escudo y recompensas confirmados; velocidad, alcance y cadencia provisionales |
-| Aider Streuner | 1-1, 1-2, 2-1, 2-2, 3-1, 3-2 | 1500 | 1000 | 700 exp, 4 honor, 700 créditos, 2 uridium + caja | Vida, escudo y recompensas confirmados; velocidad, alcance y cadencia provisionales |
+| Streuner | 1-1, 1-2, 2-1, 2-2, 3-1, 3-2 | 800 | 400 | Ver tabla de recompensas | Vida, escudo, recompensas y velocidad confirmados; alcance provisional |
+| Recruit Streuner | 1-1, 1-2, 2-1, 2-2, 3-1, 3-2 | 600 | 800 | 500 exp, 3 honor, 500 créditos, 2 uridium + caja | Vida, escudo, recompensas y velocidad confirmados; alcance y cadencia provisionales |
+| Aider Streuner | 1-1, 1-2, 2-1, 2-2, 3-1, 3-2 | 1500 | 1000 | 700 exp, 4 honor, 700 créditos, 2 uridium + caja | Vida, escudo y recompensas confirmados; velocidad igual a la de su escolta (ver abajo); alcance y cadencia provisionales |
 | Lordakia | 2-2, 3-2, 1-2, 1-3, 2-3, 3-3, 1-4, 2-4, 3-4, 1-5, 2-5, 3-5 | 2000 | 2000 | 800 exp, 4 honor, 800 créditos, 2 uridium + caja | Vida, escudo, daño y recompensas confirmados; velocidad, alcance, detección y cadencia provisionales |
 | Mordon | — (sin mapa asignado) | 260 | 0 | 90 créditos | Provisional |
 | Saimon | — (sin mapa asignado) | 420 | 0 | 150 créditos | Provisional |
@@ -60,9 +60,9 @@ Cantidad de cada materia en la caja de carga del NPC. El orden es el de la tabla
 
 | NPC | Radio | Velocidad | Daño máx. | Alcance | Detección | Cadencia (s) | Disparos | Forma |
 |---|---|---|---|---|---|---|---|---|
-| Streuner | 16 | 90 | 20 | 260 | 350 | 1.6 | 1 | Cuadrado |
-| Recruit Streuner | 18 | 100 | 40 | 280 | 380 | 1.4 | 1 | Cuadrado |
-| Aider Streuner | 15 | 110 | 70 | 320 | 300 | 2.0 | 1 | Pentágono |
+| Streuner | 16 | 280 | 20 | 260 | 350 | 1.6 | 1 | Cuadrado |
+| Recruit Streuner | 18 | 270 | 40 | 280 | 380 | 1.4 | 1 | Cuadrado |
+| Aider Streuner | 15 | Igual que su escolta | 70 | 320 | 300 | 2.0 | 1 | Pentágono |
 | Lordakia | 18 | 160 | 80 | 300 | 450 | 1.2 | 1 | Triángulo |
 | Mordon | 26 | 70 | 14 | 420 | 520 | 2.2 | 3 (abanico) | Octágono |
 | Saimon | 30 | 100 | 18 | 480 | 600 | 1.8 | 2 | Hexágono |
@@ -115,8 +115,16 @@ Cantidad de cada materia en la caja de carga del NPC. El orden es el de la tabla
 - **Aparición:** los NPC no aparecen cerca de la base (distancia mínima de 600 px).
 - **Mapas de Streuner, Recruit Streuner y Aider Streuner:** solo aparecen en los mapas X-1 y X-2: 1-1, 1-2, 2-1, 2-2, 3-1 y 3-2.
 
+## Comportamiento del Aider Streuner
+
+- **Velocidad:** igual que la de su escolta (Streuner, Recruit Streuner o Boss Streuner). Si no hay escolta cerca, se queda quieto.
+- **Pasivo por naturaleza:** no ataca por iniciativa propia. Sólo se une al combate si un escolta lucha contra el jugador, o si el jugador le dispara.
+- **Asistencia:** cura, de uno en uno, al escolta más dañado que tenga a su alcance (320). El rayo verde recupera el 3,5 % de la vida máxima del escolta por segundo (rango de 2 % a 5 %, valor provisional).
+- **Combate:** mientras dura el combate del escolta, dispara láseres al jugador, y deja de hacerlo cuando termina.
+- **Pendiente:** la formación de grupos de 4 Aider junto a cada Recruit Streuner no está implementada; aparecen de forma individual.
+
 ## Pendiente de validar
 
-- Velocidad, alcance y cadencia de Recruit Streuner y Aider Streuner. Su daño máximo ya está confirmado (40 y 70).
+- Alcance y cadencia de Recruit Streuner y Aider Streuner. Su daño máximo ya está confirmado (40 y 70). La velocidad de Streuner (280) y Recruit Streuner (270) ya está confirmada.
 - Estadísticas de Lordakia, Mordon y Saimon, y en qué mapas aparecen.
 - Equilibrio general: el láser LF-1 (12 de daño) tarda mucho en vaciar a los NPC del 3-1.

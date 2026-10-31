@@ -110,6 +110,10 @@
 
   // Mapas donde aparecen Streuner, Recruit Streuner y Aider Streuner (solo mapas X-1 y X-2)
   const STREUNER_MAPS = ['1-1', '1-2', '2-1', '2-2', '3-1', '3-2'];
+  // NPC a los que puede asistir el Aider
+  const ESCORT_TYPES = ['streuner', 'recruit', 'bossStreuner'];
+  // Fracción de la vida máxima del escolta que el Aider recupera por segundo con su rayo (rango de 2 % a 5 %)
+  const AIDER_HEAL = 0.035;
   // Mapas donde aparece Lordakia (de X2 a X5 en cada facción)
   const LORDAKIA_MAPS = ['1-2', '2-2', '3-2', '1-3', '2-3', '3-3', '1-4', '2-4', '3-4', '1-5', '2-5', '3-5'];
   // Mapas donde aparece el Boss Lordakia (solo X2)
@@ -117,10 +121,11 @@
 
   const ALIEN = {
     // passive: solo atacan si se les dispara. flee: huyen al bajar a esa fracción de vida.
-    streuner: { name: 'Streuner', sides: 4, r: 16, hp: 800,  shield: 400,  speed: 90,  dmg: 20, range: 260, aggro: 350, cool: 1.6, shots: 1, rewards: { exp: 400, honor: 2, credits: 400, uridium: 1, cargo: { prometium: 10, terbium: 10 } }, maps: STREUNER_MAPS, color: '#e0553f', passive: true },
-    // Variantes del Streuner (velocidad, daño y recompensa provisionales)
-    recruit:  { name: 'Recruit Streuner', sides: 4, r: 18, hp: 600,  shield: 800,  speed: 100, dmg: 40, range: 280, aggro: 380, cool: 1.4, shots: 1, rewards: { exp: 500, honor: 3, credits: 500, uridium: 2, cargo: { prometium: 12, terbium: 12 } }, maps: STREUNER_MAPS, color: '#e07a3f', flee: 0.2 },
-    aider:    { name: 'Aider Streuner',   sides: 5, r: 15, hp: 1500, shield: 1000, speed: 110, dmg: 70, range: 320, aggro: 300, cool: 2.0, shots: 1, rewards: { exp: 700, honor: 4, credits: 700, uridium: 2, cargo: { prometium: 15, terbium: 15 } }, maps: STREUNER_MAPS, color: '#6fd3a0', passive: true },
+    streuner: { name: 'Streuner', sides: 4, r: 16, hp: 800,  shield: 400,  speed: 280, dmg: 20, range: 260, aggro: 350, cool: 1.6, shots: 1, rewards: { exp: 400, honor: 2, credits: 400, uridium: 1, cargo: { prometium: 10, terbium: 10 } }, maps: STREUNER_MAPS, color: '#e0553f', passive: true },
+    // Variantes del Streuner (alcance, cadencia y recompensa provisionales)
+    recruit:  { name: 'Recruit Streuner', sides: 4, r: 18, hp: 600,  shield: 800,  speed: 270, dmg: 40, range: 280, aggro: 380, cool: 1.4, shots: 1, rewards: { exp: 500, honor: 3, credits: 500, uridium: 2, cargo: { prometium: 12, terbium: 12 } }, maps: STREUNER_MAPS, color: '#e07a3f', flee: 0.2 },
+    // Sin velocidad propia: iguala la de la nave a la que asiste (ver escortOf)
+    aider:    { name: 'Aider Streuner',   sides: 5, r: 15, hp: 1500, shield: 1000, speed: null, escort: true, dmg: 70, range: 320, aggro: 300, cool: 2.0, shots: 1, rewards: { exp: 700, honor: 4, credits: 700, uridium: 2, cargo: { prometium: 15, terbium: 15 } }, maps: STREUNER_MAPS, color: '#6fd3a0', passive: true },
     // Solo en los mapas X-2. Velocidad, alcance, detección, cadencia y tipo son provisionales
     bossStreuner: { name: 'Boss Streuner', sides: 4, r: 26, hp: 3200, shield: 1600, speed: 80, dmg: 100, range: 300, aggro: 350, cool: 1.6, shots: 2, rewards: { exp: 1600, honor: 8, credits: 1600, uridium: 4, cargo: { prometium: 40, terbium: 10, endurium: 40 } }, maps: ['1-2', '2-2', '3-2'], color: '#ff6b35', passive: true },
     // Hostil: ataca en cuanto la nave entra en su detección
@@ -150,9 +155,9 @@
     { name: 'Phantom', zone: '3-1', x: 34000, y: 22000, company: 'VRU' },
     { name: 'Black', zone: '3-2', x: 8000, y: 12000, company: 'VRU' },
     { name: 'Kaelith', zone: '3-2', x: 12000, y: 18000, company: 'VRU' },
-    { name: 'MMO-01', zone: '3-1', x: 12000, y: 8000, company: 'MMO', enemy: true },
-    { name: 'MMO-02', zone: '3-1', x: 14000, y: 11000, company: 'MMO', enemy: true },
-    { name: 'EIC-01', zone: '3-1', x: 10000, y: 13000, company: 'EIC', enemy: true },
+    { name: 'Slider', zone: '3-1', x: 12000, y: 8000, company: 'MMO', enemy: true },
+    { name: 'Poncho', zone: '3-1', x: 14000, y: 11000, company: 'MMO', enemy: true },
+    { name: 'Chroma', zone: '3-1', x: 10000, y: 13000, company: 'EIC', enemy: true },
   ];
 
   // Base de datos de naves. Para añadir una nave basta con añadir una entrada aquí;
@@ -900,6 +905,51 @@
     return best;
   }
 
+  // NPC de la lista ESCORT_TYPES más cercano a `a` en 600 px, o null
+  function escortOf(a) {
+    let best = null, bd = 600;
+    for (const e of g.aliens) {
+      if (!ESCORT_TYPES.includes(e.type)) continue;
+      const d = dist(a.x, a.y, e.x, e.y);
+      if (d < bd) { bd = d; best = e; }
+    }
+    return best;
+  }
+
+  // Escolta que el Aider cura con su rayo: el más dañado dentro de su alcance, o null
+  function healTarget(a) {
+    let best = null, bf = 1;
+    for (const e of g.aliens) {
+      if (!ESCORT_TYPES.includes(e.type) || dist(a.x, a.y, e.x, e.y) > ALIEN.aider.range) continue;
+      const f = e.hp / ALIEN[e.type].hp;
+      if (f < bf) { bf = f; best = e; }
+    }
+    return best;
+  }
+
+  // Rayo verde del Aider hacia el escolta que está curando
+  function drawAiderBeams() {
+    for (const a of g.aliens) {
+      if (!ALIEN[a.type].escort) continue;
+      const link = healTarget(a);
+      if (!link) continue;
+      ctx.beginPath();
+      ctx.moveTo(sx(a.x), sy(a.y));
+      ctx.lineTo(sx(link.x), sy(link.y));
+      ctx.strokeStyle = 'rgba(111,227,154,0.8)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  }
+
+  // Velocidad de un NPC. El Aider iguala la de su escolta; sin escolta se queda quieto
+  function speedOf(a) {
+    const t = ALIEN[a.type];
+    if (!t.escort) return t.speed;
+    const e = escortOf(a);
+    return e ? ALIEN[e.type].speed : 0;
+  }
+
   function updateAliens(dt) {
     const p = g.p, z = g.zone;
     const atBase = dist(p.x, p.y, z.base.x, z.base.y) < z.base.r;
@@ -908,6 +958,15 @@
       // Persiguen a su objetivo hasta que muere o, si es la nave, llega a la base (un portal cambia de mapa y limpia todo)
       if (a.victim && (!targetable(a.victim) || (a.victim === p && atBase))) a.victim = null;
       if (!a.victim) { a.aggro = false; a.fleeing = false; }
+      if (t.escort) {
+        // El Aider se une al combate cuando un escolta lucha contra el jugador, y lo deja cuando termina
+        const joining = g.aliens.some(e => ESCORT_TYPES.includes(e.type) && e.aggro && e.victim === p && dist(a.x, a.y, e.x, e.y) < 600);
+        if (joining && !a.aggro) { a.aggro = true; a.victim = p; a.joined = true; }
+        else if (!joining && a.joined) { a.aggro = false; a.victim = null; a.joined = false; }
+        // Rayo de asistencia: cura al escolta más dañado de su alcance
+        const link = healTarget(a);
+        if (link) link.hp = Math.min(ALIEN[link.type].hp, link.hp + ALIEN[link.type].hp * AIDER_HEAL * dt);
+      }
       // Los pasivos solo atacan si se les dispara; el resto detecta un objetivo en su radio
       if (!a.aggro && !t.passive) {
         const c = nearestVictim(a.x, a.y, t.aggro, atBase);
@@ -924,7 +983,8 @@
         else if (d > t.range * 0.8) { ux = nx; uy = ny; }
         else if (d < t.range * 0.5) { ux = -nx; uy = -ny; }
         else { ux = -ny * 0.4; uy = nx * 0.4; }
-        const sp = a.fleeing ? t.speed * 1.2 : t.speed;
+        const base = speedOf(a);
+        const sp = a.fleeing ? base * 1.2 : base;
         wx = ux * sp; wy = uy * sp;
 
         a.cool -= dt;
@@ -939,6 +999,12 @@
             g.enemyShots.push({ x: a.x, y: a.y, vx: Math.cos(ang) * 300, vy: Math.sin(ang) * 300, life: 3, dmg, miss });
           }
         }
+      } else if (t.escort && escortOf(a)) {
+        // Escolta: se acerca a su nave y, cuando está junto a ella, la sigue a su misma velocidad
+        const e = escortOf(a);
+        const ex = e.x - a.x, ey = e.y - a.y, ed = Math.hypot(ex, ey) || 1;
+        const sp = ed > 120 ? speedOf(a) : 0;
+        wx = ex / ed * sp; wy = ey / ed * sp;
       } else {
         a.wt -= dt;
         if (a.wt <= 0) { a.wa = rnd(0, Math.PI * 2); a.wt = rnd(2, 4); }
@@ -1249,6 +1315,7 @@
 
   function drawAliens() {
     const p = g.p;
+    drawAiderBeams();
     for (const a of g.aliens) {
       const t = ALIEN[a.type];
       const x = sx(a.x), y = sy(a.y);
