@@ -46,11 +46,12 @@
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
   // ---------- Datos ----------
-  // Dos capas de coordenadas. El mundo (motor) mide 42 000 x 27 000 unidades y 1 unidad = 1 px
-  // en la vista principal. El minimapa muestra el mundo a escala 100:1 (420 x 270).
+  // Dos capas de coordenadas. El mundo (motor) mide 25 200 x 15 600 unidades y 1 unidad = 1 px
+  // en la vista principal. El minimapa muestra el mundo a escala 120:1 (210 x 130), como el mapa original.
+  // Calibrado con una nave de 533 de velocidad: de la esquina 0, 0 a la 210, 130 tarda unos 56 s.
   // Todos los mapas usan este tamaño salvo que se indique otro en su entrada de ZONES. Los límites son duros.
-  const MINI_UNIT = 100;
-  const MAP_W = 42000, MAP_H = 27000;
+  const MINI_UNIT = 120;
+  const MAP_W = 25200, MAP_H = 15600;
 
   // Facciones: MMO (Marte, mapas 1-X), EIC (Tierra, 2-X) y VRU (Venus, 3-X).
   // Los mapas 1-X y 2-X se añadirán más adelante. El planeta se atenúa (alpha)
@@ -59,18 +60,18 @@
     {
       id: '3-1', name: '3-1 · VRU', faction: 'VRU', w: MAP_W, h: MAP_H,
       bgTop: '#0c2a1a', bgBottom: '#02080a',
-      base: { x: 39000, y: 24000, r: 250 },
-      station: { x: 39120, y: 23910 },
-      planet: { x: 32500, y: 7500, r: 700, alpha: 1 },
-      gates: { next: { x: 3000, y: 3000 } },
+      base: { x: 23400, y: 13867, r: 250 },
+      station: { x: 23472, y: 13816 },
+      planet: { x: 19500, y: 4333, r: 700, alpha: 1 },
+      gates: { next: { x: 1800, y: 1733 } },
     },
     {
       id: '3-2', name: '3-2 · VRU', faction: 'VRU', w: MAP_W, h: MAP_H,
       bgTop: '#2a2a0c', bgBottom: '#0a0802',
-      base: { x: 2500, y: MAP_H / 2, r: 250 },
-      station: { x: 2620, y: MAP_H / 2 - 90 },
-      planet: { x: 32500, y: 20000, r: 700, alpha: 1 },
-      gates: { prev: { x: 3000, y: 3000 } },
+      base: { x: 1500, y: MAP_H / 2, r: 250 },
+      station: { x: 1572, y: MAP_H / 2 - 90 },
+      planet: { x: 19500, y: 11556, r: 700, alpha: 1 },
+      gates: { prev: { x: 1800, y: 1733 } },
     },
   ];
 
@@ -158,14 +159,14 @@
   const BOT_SHIP = 'PHOENIX';
   // enemy: de empresa rival; es hostil al jugador de forma permanente y no cruza puertas (de momento sólo en 3-1)
   const BOTS = [
-    { name: 'Blade', zone: '3-1', x: 36000, y: 20000, company: 'VRU' },
-    { name: 'Joker', zone: '3-1', x: 30000, y: 16000, company: 'VRU' },
-    { name: 'Phantom', zone: '3-1', x: 34000, y: 22000, company: 'VRU' },
-    { name: 'Black', zone: '3-2', x: 8000, y: 12000, company: 'VRU' },
-    { name: 'Kaelith', zone: '3-2', x: 12000, y: 18000, company: 'VRU' },
-    { name: 'Slider', zone: '3-1', x: 12000, y: 8000, company: 'MMO', enemy: true },
-    { name: 'Poncho', zone: '3-1', x: 14000, y: 11000, company: 'MMO', enemy: true },
-    { name: 'Chroma', zone: '3-1', x: 10000, y: 13000, company: 'EIC', enemy: true },
+    { name: 'Blade', zone: '3-1', x: 21600, y: 11556, company: 'VRU' },
+    { name: 'Joker', zone: '3-1', x: 18000, y: 9244, company: 'VRU' },
+    { name: 'Phantom', zone: '3-1', x: 20400, y: 12711, company: 'VRU' },
+    { name: 'Black', zone: '3-2', x: 4800, y: 6933, company: 'VRU' },
+    { name: 'Kaelith', zone: '3-2', x: 7200, y: 10400, company: 'VRU' },
+    { name: 'Slider', zone: '3-1', x: 7200, y: 4622, company: 'MMO', enemy: true },
+    { name: 'Poncho', zone: '3-1', x: 8400, y: 6356, company: 'MMO', enemy: true },
+    { name: 'Chroma', zone: '3-1', x: 6000, y: 7511, company: 'EIC', enemy: true },
   ];
 
   // Base de datos de naves. Para añadir una nave basta con añadir una entrada aquí;
@@ -261,8 +262,8 @@
   // title: nombre destacado; description: historia de la misión (textos provisionales)
   const MISSIONS = [
     { title: 'Cazador de Streuner', description: 'Los Streuner de esta zona llevan días atacando a los convoyes que cruzan el sector. Elimina a ocho de ellos para asegurar la ruta hacia la base.', text: 'Elimina 8 Streuner', type: 'streuner', count: 8, rewards: { credits: 200 } },
-    // Misión de prueba de navegación: llegar a una coordenada (en unidades del minimapa 200 / 133)
-    { title: 'Reconocimiento', description: 'Un satélite ha detectado una señal sin identificar en la posición 200 / 133. Acude allí y confirma qué está pasando.', text: 'Viaja a la posición 200 / 133', type: 'travel', count: 1, to: { x: 20000, y: 13300 }, radius: 150, rewards: { credits: 300 } },
+    // Misión de prueba de navegación: llegar a una coordenada (en unidades del minimapa 200 / 120)
+    { title: 'Reconocimiento', description: 'Un satélite ha detectado una señal sin identificar en la posición 200 / 120. Acude allí y confirma qué está pasando.', text: 'Viaja a la posición 200 / 120', type: 'travel', count: 1, to: { x: 24000, y: 14400 }, radius: 150, rewards: { credits: 300 } },
     { title: 'Caza de reclutas', description: 'Los Recruit Streuner han empezado a reagruparse cerca de la frontera. Reduce su número antes de que vuelvan a atacar.', text: 'Elimina 6 Recruit Streuner', type: 'recruit', count: 6, rewards: { credits: 350 } },
     { title: 'Caza de ayudantes', description: 'Los Aider Streuner protegen a los reclutas en esta zona. Elimina a seis de ellos para despejar el camino.', text: 'Elimina 6 Aider Streuner', type: 'aider', count: 6, rewards: { credits: 350 } },
   ];
