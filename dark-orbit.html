@@ -288,10 +288,16 @@
     { key: 'promerium', name: 'Promerium', price: 1000 },
   ];
   // Materias de refinamiento: no ocupan bodega, tienen almacenamiento ilimitado y no se venden.
-  // Sirven de materia prima para mejorar otras materias mediante el refinamiento (todavía sin implementar)
+  // Sirven de materia prima para mejorar otras materias mediante el refinamiento
   const REFINE_MATERIALS = [
     { key: 'xenomita', name: 'Xenomita' },
   ];
+  // Recetas: unidades de cada materia base que hacen falta para fabricar una unidad de la refinada
+  const REFINE_RECIPES = {
+    prometid: { prometium: 20, endurium: 10 },
+    duranium: { terbium: 20, endurium: 10 },
+    promerium: { prometid: 10, duranium: 10, xenomita: 1 },
+  };
 
   // title: nombre destacado; description: historia de la misión (textos provisionales)
   const MISSIONS = [
@@ -326,7 +332,7 @@
       missions: [{ id: 0, progress: 0 }, { id: 1, progress: 0 }], nextMission: 2, missionSel: 0,
       banner: 0, bannerText: '', rewardT: 0, rewardLines: [], hitFlash: 0, paused: false,
       missionOpen: false, missionTab: 'summary', stationOpen: false,
-      naveOpen: false, navePos: null,
+      naveOpen: false, navePos: null, refineOpen: false, refinePos: null, refineTab: 'refine',
       playerOpen: false, playerPos: null, playerId: String(Math.floor(10000000 + Math.random() * 90000000)),
       teleportBonus: 0, lootKeys: 0,
       safeT: 0, wasSafe: false, clock: 0, lastSpot: -Infinity,
@@ -1402,6 +1408,28 @@
     g.enemyShots = g.enemyShots.filter(s => s.life > 0);
   }
 
+  // Algoritmo de recogida de cajas. La xenomita no ocupa bodega y entra siempre al 100 %.
+  // Sin espacio libre se cancela y la caja conserva sus materias de bodega. Si todo cabe, entra entero.
+  // Si no cabe, reparto proporcional al peso de cada materia con redondeo hacia abajo; lo que sobra se pierde.
+  function takeCargo(items) {
+    for (const [key, n] of Object.entries(items)) if (!(key in g.cargo)) g.refine[key] += n;
+    const want = Object.fromEntries(Object.entries(items).filter(([key, n]) => key in g.cargo && n > 0));
+    const total = Object.values(want).reduce((s, n) => s + n, 0);
+    const free = Math.max(0, SHIPS[g.shipId].cargo - Object.values(g.cargo).reduce((s, n) => s + n, 0));
+    if (total === 0) return { taken: 0, partial: false, rest: {} };
+    if (free <= 0) return { taken: 0, partial: false, rest: want };
+    const partial = total > free;
+    let taken = 0;
+    const rest = {};
+    for (const [key, n] of Object.entries(want)) {
+      const share = partial ? Math.floor(n * free / total) : n;
+      g.cargo[key] += share;
+      taken += share;
+      if (n - share > 0) rest[key] = n - share;
+    }
+    return { taken, partial, rest };
+  }
+
   function updatePickups(dt) {
     const p = g.p;
     for (const k of g.pickups) {
@@ -1413,12 +1441,15 @@
       if (!p.dead && d < 22 && k.life > 0 && collect) {
         if (k.type === 'repair') p.hp = Math.min(maxHpNow(), p.hp + 25);
         else if (k.type === 'cargo') {
-          // Cada materia va a su almacén: las de bodega ocupan espacio, las de refinamiento no
-          for (const [key, n] of Object.entries(k.cargo)) {
-            if (key in g.cargo) g.cargo[key] += n;
-            else g.refine[key] += n;
+          // Lo que no ha entrado se queda en la caja, que sigue en el mapa hasta que expire; hay que volver a pulsarla
+          const { taken, partial, rest } = takeCargo(k.cargo);
+          if (Object.keys(rest).length) {
+            k.cargo = rest;
+            k.want = false;
+            showBanner(partial && taken > 0 ? 'Bodega llena: recogida parcial' : 'Bodega llena');
+            continue;
           }
-          showBanner('Caja de carga recogida');
+          showBanner(partial ? 'Bodega llena: recogida parcial' : 'Caja de carga recogida');
         }
         k.life = 0;
       }
@@ -2474,6 +2505,187 @@
 
   }
 
+  // ---------- Refinamiento ----------
+  const REF_W = 500, REF_H = 600;
+  // Posición de cada materia en la pestaña: cx es el centro horizontal y y el borde superior dentro de la ventana
+  // La xenomita va aparte: no se refina, se obtiene
+  const REF_CARDS = {
+    prometium: { cx: 135, y: 100, color: '#ff5a3c' },
+    endurium: { cx: 245, y: 100, color: '#7fe7ff' },
+    terbium: { cx: 355, y: 100, color: '#ffe066' },
+    prometid: { cx: 190, y: 270, color: '#ff7ad9' },
+    duranium: { cx: 300, y: 270, color: '#6fe39a' },
+    xenomita: { cx: 440, y: 270, color: '#cfe9ff', star: true },
+    promerium: { cx: 245, y: 440, color: '#ffa640' },
+  };
+  // Enlaces de cada materia base a la refinada que la usa
+  const REF_LINKS = [
+    ['prometium', 'prometid'], ['endurium', 'prometid'], ['endurium', 'duranium'], ['terbium', 'duranium'],
+    ['prometid', 'promerium'], ['duranium', 'promerium'], ['xenomita', 'promerium'],
+  ];
+  const REF_TABS = [{ id: 'refine', label: 'Refinamiento' }, { id: 'level', label: 'Subir de nivel' }];
+
+  // Cantidad de una materia: el almacén ilimitado para las de refinamiento, la bodega para el resto
+  const stockOf = key => (key in g.refine ? g.refine[key] : g.cargo[key]);
+  const setStock = (key, n) => { if (key in g.refine) g.refine[key] = n; else g.cargo[key] = n; };
+  const materialName = key => [...MATERIALS, ...REFINE_MATERIALS].find(m => m.key === key).name;
+  const canRefine = key => Object.entries(REFINE_RECIPES[key]).every(([k, n]) => stockOf(k) >= n);
+
+  // Fabrica una unidad de la materia refinada si hay ingredientes suficientes
+  function refine(key) {
+    if (!canRefine(key)) return;
+    for (const [k, n] of Object.entries(REFINE_RECIPES[key])) setStock(k, stockOf(k) - n);
+    setStock(key, stockOf(key) + 1);
+    saveGame();
+  }
+
+  function refineGeom() {
+    if (!g.refineOpen) return { x: W - 228, y: 16, w: 36, h: 36 };
+    const pos = g.refinePos || { x: Math.max(0, (W - REF_W) / 2), y: 40 };
+    const x = clamp(pos.x, 0, W - REF_W), y = clamp(pos.y, 0, H - REF_H);
+    return { x, y, w: REF_W, h: REF_H, close: { x: x + REF_W - 26, y: y + 6, w: 20, h: 20 } };
+  }
+
+  function refineTabGeom(b, i) { return { x: b.x + 16 + i * 170, y: b.y + 40, w: 150, h: 26 }; }
+
+  // Tarjeta de una materia: con botón de refinado si tiene receta
+  function refineCardGeom(b, key) {
+    const c = REF_CARDS[key], x = b.x + c.cx - 48, y = b.y + c.y;
+    const hasBtn = key in REFINE_RECIPES;
+    return { x, y, w: 96, h: hasBtn ? 144 : 116, btn: hasBtn ? { x: x + 10, y: y + 122, w: 76, h: 22 } : null };
+  }
+
+  // Gema o estrella de una materia, centrada en (cx, cy) y escalada por s
+  function drawGem(cx, cy, color, s = 1, star = false) {
+    const pts = star
+      ? Array.from({ length: 8 }, (_, i) => {
+        const a = i * Math.PI / 4 - Math.PI / 2, r = i % 2 ? 6 : 18;
+        return [Math.cos(a) * r, Math.sin(a) * r];
+      })
+      : [[-20, -4], [-6, -22], [14, -18], [22, 2], [8, 20], [-14, 16]];
+    ctx.save();
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    pts.forEach(([x, y], i) => {
+      if (i) ctx.lineTo(cx + x * s, cy + y * s);
+      else ctx.moveTo(cx + x * s, cy + y * s);
+    });
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawRefineIcon(b) {
+    const hover = inBox(b, mouse.x, mouse.y);
+    const bg = ctx.createLinearGradient(0, b.y, 0, b.y + b.h);
+    bg.addColorStop(0, '#1b2a44');
+    bg.addColorStop(1, '#070d18');
+    ctx.fillStyle = bg;
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeStyle = hover ? '#fff0b3' : '#ffd166';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(b.x + 1, b.y + 1, b.w - 2, b.h - 2);
+    drawGem(b.x + b.w / 2, b.y + b.h / 2, '#ff7ad9', 0.5);
+    if (hover) drawIconTooltip(b, 'Refinamiento');
+  }
+
+  // Enlaces de cada materia base hasta la refinada que la usa
+  function drawRefineLinks(b) {
+    ctx.save();
+    ctx.strokeStyle = '#e8eef8';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (const [from, to] of REF_LINKS) {
+      const a = refineCardGeom(b, from), t = refineCardGeom(b, to);
+      ctx.moveTo(a.x + a.w / 2, a.y + a.h);
+      ctx.lineTo(t.x + t.w / 2, t.y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawRefineCard(b, key) {
+    const c = REF_CARDS[key], r = refineCardGeom(b, key);
+    ctx.save();
+    ctx.textAlign = 'center';
+    // Nombre
+    ctx.fillStyle = '#1b2a44';
+    ctx.fillRect(r.x, r.y, r.w, 20);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 12px Consolas, monospace';
+    ctx.fillText(materialName(key), r.x + r.w / 2, r.y + 14);
+    // Dibujo de la materia
+    ctx.fillStyle = '#10192b';
+    ctx.fillRect(r.x, r.y + 20, r.w, 70);
+    drawGem(r.x + r.w / 2, r.y + 55, c.color, 1, c.star);
+    // Cantidad en la bodega o en el almacén de refinamiento
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(r.x, r.y + 90, r.w, 20);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 12px Consolas, monospace';
+    ctx.fillText(formatNum(stockOf(key)), r.x + r.w / 2, r.y + 105);
+    // Botón de refinado: apagado si faltan ingredientes
+    if (r.btn) {
+      const ok = canRefine(key), hover = ok && inBox(r.btn, mouse.x, mouse.y);
+      ctx.fillStyle = ok ? (hover ? '#3a4b66' : '#2a3a55') : '#151e30';
+      ctx.fillRect(r.btn.x, r.btn.y, r.btn.w, r.btn.h);
+      ctx.fillStyle = ok ? '#ffffff' : '#5f6e84';
+      ctx.font = '12px Consolas, monospace';
+      ctx.fillText('Refinar', r.btn.x + r.btn.w / 2, r.btn.y + 15);
+    }
+    ctx.restore();
+  }
+
+  function drawRefineWindow() {
+    const b = refineGeom();
+    ctx.save();
+    if (!g.refineOpen) { drawRefineIcon(b); ctx.restore(); return; }
+    ctx.fillStyle = '#0b1424';
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeStyle = '#ffd166';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
+    // Cabecera con icono, título y botón de cerrar, como las demás ventanas
+    drawGem(b.x + 18, b.y + 17, '#ff7ad9', 0.35);
+    ctx.font = '13px Consolas, monospace';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#ffd166';
+    ctx.fillText('REFINAMIENTO', b.x + 30, b.y + 22);
+    ctx.fillStyle = '#5f6e84';
+    ctx.fillRect(b.x + 8, b.y + 30, b.w - 16, 1);
+    const c = b.close;
+    ctx.strokeStyle = '#cfe8ff';
+    ctx.beginPath();
+    ctx.moveTo(c.x + 5, c.y + 5); ctx.lineTo(c.x + c.w - 5, c.y + c.h - 5);
+    ctx.moveTo(c.x + c.w - 5, c.y + 5); ctx.lineTo(c.x + 5, c.y + c.h - 5);
+    ctx.stroke();
+    // Pestañas
+    REF_TABS.forEach((t, i) => {
+      const r = refineTabGeom(b, i), on = g.refineTab === t.id;
+      ctx.fillStyle = on ? '#1b2a44' : '#0b1424';
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.strokeStyle = on ? '#ffd166' : '#5f6e84';
+      ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+      ctx.fillStyle = on ? '#ffd166' : '#8fa0b8';
+      ctx.font = '12px Consolas, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(t.label, r.x + r.w / 2, r.y + 17);
+    });
+    if (g.refineTab === 'refine') {
+      drawRefineLinks(b);
+      for (const key of Object.keys(REF_CARDS)) drawRefineCard(b, key);
+    } else {
+      ctx.fillStyle = '#8fa0b8';
+      ctx.font = '13px Consolas, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('Próximamente', b.x + b.w / 2, b.y + b.h / 2);
+    }
+    ctx.restore();
+  }
+
   // ---------- Hangar ----------
   // Icono del hangar, arriba a la derecha junto a los de nave, usuario y misiones
   function hangarIconGeom() { return { x: W - 184, y: 16, w: 36, h: 36 }; }
@@ -3074,6 +3286,7 @@
     drawStationWindow();
     drawPlayerWindow();
     drawNaveWindow();
+    drawRefineWindow();
     drawHangarIcon(hangarIconGeom());
     drawActionBar();
     drawSafeMsg();
@@ -3139,6 +3352,20 @@
       if (!g.naveOpen) g.naveOpen = true;
       else if (inBox(nw.close, e.clientX, e.clientY)) g.naveOpen = false;
       else if (e.clientY < nw.y + 30) g.drag = { key: 'navePos', dx: e.clientX - nw.x, dy: e.clientY - nw.y };
+      return;
+    }
+    // Ventana de refinamiento: el icono la abre; la X la cierra; las pestañas cambian; cada botón refina una unidad
+    const rw = refineGeom();
+    if (inBox(rw, e.clientX, e.clientY)) {
+      if (!g.refineOpen) g.refineOpen = true;
+      else if (inBox(rw.close, e.clientX, e.clientY)) g.refineOpen = false;
+      else {
+        const tab = REF_TABS.find((t, i) => inBox(refineTabGeom(rw, i), e.clientX, e.clientY));
+        const key = g.refineTab === 'refine' ? Object.keys(REFINE_RECIPES).find(k => inBox(refineCardGeom(rw, k).btn, e.clientX, e.clientY)) : null;
+        if (tab) g.refineTab = tab.id;
+        else if (key) refine(key);
+        else if (e.clientY < rw.y + 30) g.drag = { key: 'refinePos', dx: e.clientX - rw.x, dy: e.clientY - rw.y };
+      }
       return;
     }
     // Ventana de venta: la X la cierra y cada "Vender" vende esa materia; un clic dentro no mueve la nave
@@ -3325,7 +3552,7 @@
       damage: p.damage, speed: p.speed, ammo: p.ammo, missile: p.missile,
       up: g.up, credits: g.credits, uridium: g.uridium, exp: g.exp, honor: g.honor,
       cargo: g.cargo, refine: g.refine, missions: g.missions, nextMission: g.nextMission, missionPos: g.missionPos,
-      playerId: g.playerId, playerPos: g.playerPos, navePos: g.navePos, teleportBonus: g.teleportBonus, lootKeys: g.lootKeys,
+      playerId: g.playerId, playerPos: g.playerPos, navePos: g.navePos, refinePos: g.refinePos, teleportBonus: g.teleportBonus, lootKeys: g.lootKeys,
       shipId: g.shipId, equip: g.equip, generators: g.generators,
       bots: g.allies.map(b => ({ name: b.name, zi: b.zi, x: b.x, y: b.y, exp: b.exp, honor: b.honor })),
       world: { ...g.world, [g.zone.id]: saveAliens(g.aliens) },
@@ -3356,6 +3583,7 @@
     if (d.playerId) g.playerId = d.playerId;
     if (d.playerPos) g.playerPos = d.playerPos;
     if (d.navePos) g.navePos = d.navePos;
+    if (d.refinePos) g.refinePos = d.refinePos;
     g.teleportBonus = d.teleportBonus || 0;
     g.lootKeys = d.lootKeys || 0;
     // Partidas anteriores a la barra editable no tienen "bar": se queda la barra por defecto
