@@ -314,6 +314,7 @@
         damage: 0, cool: 0, ammo: 'LCB10', missile: null, missCool: 0,  // damage: bonus de las mejoras, se suma al de los láseres
         target: null, tx: null, ty: null, dead: false, respawnT: 0,
         attacking: false, rank: null, company: 'VRU', slowT: 0, slowF: 1,
+        spawnT: 0, combatT: 0, nazBroken: false,
       },
       up: { dmg: 0, hp: 0, spd: 0 },
       zi: 0, zone: ZONES[0],
@@ -368,6 +369,7 @@
     const at = spawn || respawnPoint();
     p.x = at.x; p.y = at.y;
     p.tx = null; p.ty = null; p.target = null; p.attacking = false;
+    p.spawnT = SPAWN_PROTECT; p.combatT = 0; p.nazBroken = false;
     showBanner(g.zone.name);
   }
 
@@ -401,10 +403,28 @@
   // Teletransporte: solo disponible a esta distancia de la puerta (la misma que la zona segura).
   // Se activa con el icono sobre la puerta o con la tecla J; no ocurre al pasar por encima.
   const PORTAL_RANGE = 200;
+  const SPAWN_PROTECT = 15;   // segundos de protección tras cruzar un portal
+  const COMBAT_TIME = 8;      // segundos de combate tras una acción hostil o un golpe recibido
 
   function portalInRange() {
     const p = g.p;
     return portalsOf(g.zi).find(pt => dist(p.x, p.y, pt.x, pt.y) < PORTAL_RANGE) || null;
+  }
+
+  // Zona de no ataque: la base siempre protege; el anillo del portal, mientras la nave no haya roto la protección
+  function nazProtected() {
+    const p = g.p, z = g.zone;
+    if (z.base && dist(p.x, p.y, z.base.x, z.base.y) < z.base.r) return true;
+    if (!portalInRange()) return false;
+    return p.spawnT > 0 || (!p.nazBroken && p.combatT <= 0);
+  }
+
+  // Acción hostil del jugador: cancela la protección de llegada y, dentro del anillo, la rompe
+  function markHostile() {
+    const p = g.p;
+    p.spawnT = 0;
+    p.combatT = COMBAT_TIME;
+    if (portalInRange()) p.nazBroken = true;
   }
 
   function teleport(pt) {
@@ -596,6 +616,7 @@
   function hurt(d) {
     const p = g.p;
     if (p.dead) return;
+    p.combatT = COMBAT_TIME;
     g.hitFlash = 0.12;
     spawnText(0, -30, Math.round(d), '#b07cff', true);
     // El escudo absorbe su porcentaje del golpe mientras le quede reserva; el resto va a la vida
@@ -825,6 +846,7 @@
 
   function fire(target) {
     if (!hasLaser()) return;
+    markHostile();
     playLaserSound();
     const p = g.p, a = AMMO[p.ammo];
     const base = Math.atan2(target.y - p.y, target.x - p.x);
@@ -850,6 +872,7 @@
     const m = MISSILES[p.missile];
     const ang = Math.atan2(t.y - p.y, t.x - p.x);
     p.missCool = m.cool;
+    markHostile();
     playMissileLaunchSound();
     g.bullets.push({
       x: p.x + Math.cos(ang) * 18, y: p.y + Math.sin(ang) * 18,
@@ -888,6 +911,12 @@
     } else {
       updatePlayer(dt);
     }
+
+    // Protección de llegada: se corta al salir del anillo. El combate se agota solo y devuelve la protección
+    if (p.spawnT > 0 && !portalInRange()) p.spawnT = 0;
+    p.spawnT = Math.max(0, p.spawnT - dt);
+    p.combatT = Math.max(0, p.combatT - dt);
+    if (p.combatT <= 0) p.nazBroken = false;
 
     updateAliens(dt);
     updateAllies(dt);
@@ -948,14 +977,14 @@
 
   // Un objetivo es la nave o un bot. Solo se persigue o se dispara a objetivos vivos y en este mapa
   function targetable(v) {
-    if (v === g.p) return !g.p.dead;
+    if (v === g.p) return !g.p.dead && !nazProtected();
     return v.zi === g.zi && !v.dead;
   }
 
   // Objetivo más cercano dentro de r: la nave (si no está en base) o un bot vivo de este mapa
-  function nearestVictim(x, y, r, atBase) {
+  function nearestVictim(x, y, r) {
     let best = null, bd = r;
-    if (!atBase && targetable(g.p)) {
+    if (targetable(g.p)) {
       const d = dist(x, y, g.p.x, g.p.y);
       if (d < bd) { bd = d; best = g.p; }
     }
@@ -1027,11 +1056,10 @@
 
   function updateAliens(dt) {
     const p = g.p, z = g.zone;
-    const atBase = !!z.base && dist(p.x, p.y, z.base.x, z.base.y) < z.base.r;
     for (const a of g.aliens) {
       const t = ALIEN[a.type];
-      // Persiguen a su objetivo hasta que muere o, si es la nave, llega a la base (un portal cambia de mapa y limpia todo)
-      if (a.victim && (!targetable(a.victim) || (a.victim === p && atBase))) a.victim = null;
+      // Persiguen a su objetivo hasta que muere o deja de ser objetivo (la nave, si está en zona de no ataque)
+      if (a.victim && !targetable(a.victim)) a.victim = null;
       // Al terminar el combate, el misil ralentizador vuelve a poder tirarse en el siguiente
       if (!a.victim) { a.aggro = false; a.fleeing = false; a.slowRolled = false; }
       if (t.escort) {
@@ -1045,7 +1073,7 @@
       }
       // Los pasivos solo atacan si se les dispara; el resto detecta un objetivo en su radio
       if (!a.aggro && !t.passive) {
-        const c = nearestVictim(a.x, a.y, t.aggro, atBase);
+        const c = nearestVictim(a.x, a.y, t.aggro);
         if (c) { a.aggro = true; a.victim = c; }
       }
 
@@ -3116,14 +3144,19 @@
     const p = g.p;
     p.target = a;
     p.attacking = true;
+    markHostile();
   }
 
+  // Casilla de la barra (clic o tecla). Un láser alterna el ataque: si ya se ataca con ese láser, cesa;
+  // si se ataca con otro, cambia de láser y sigue atacando
   function useSlot(i) {
     const item = g.bar[i];
     if (!item) return;
-    if (item.ammo) g.p.ammo = item.ammo;
     if (item.missile) g.p.missile = item.missile;
-    if (item.ammo && g.p.target && g.p.target.hp > 0 && !g.p.dead) startAttack(g.p.target);
+    if (!item.ammo) return;
+    if (g.p.attacking && g.p.ammo === item.ammo) { g.p.attacking = false; return; }
+    g.p.ammo = item.ammo;
+    if (g.p.target && g.p.target.hp > 0 && !g.p.dead) startAttack(g.p.target);
   }
 
   // Objeto de una categoría: el clic lo selecciona como munición o misil. El doble clic además ataca con él
@@ -3196,7 +3229,7 @@
     const p = g.p;
     const data = {
       zi: g.zi, x: p.x, y: p.y, hp: p.hp, maxHp: p.maxHp, shield: p.shield,
-      damage: p.damage, speed: p.speed, ammo: p.ammo,
+      damage: p.damage, speed: p.speed, ammo: p.ammo, missile: p.missile,
       up: g.up, credits: g.credits, uridium: g.uridium, exp: g.exp, honor: g.honor,
       cargo: g.cargo, refine: g.refine, missions: g.missions, nextMission: g.nextMission, missionPos: g.missionPos,
       playerId: g.playerId, playerPos: g.playerPos, navePos: g.navePos, teleportBonus: g.teleportBonus, lootKeys: g.lootKeys,
@@ -3238,6 +3271,7 @@
     p.x = d.x; p.y = d.y; p.maxHp = d.maxHp; p.hp = d.hp > 0 ? d.hp : d.maxHp;
     p.damage = d.damage; p.speed = d.speed;
     if (AMMO[d.ammo]) p.ammo = d.ammo;
+    if (MISSILES[d.missile]) p.missile = d.missile;
     // Escudo: la capacidad sale de los generadores equipados; la reserva se limita a ella
     const st = shieldStats();
     p.maxShield = st.max; p.absorb = st.absorb; p.shield = Math.min(d.shield, st.max);
