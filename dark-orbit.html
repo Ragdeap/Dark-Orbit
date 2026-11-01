@@ -440,7 +440,7 @@
       },
       up: { dmg: 0, hp: 0, spd: 0 },
       zi: 0, zone: ZONES[0],
-      aliens: [], world: {}, bullets: [], enemyShots: [], pickups: [], parts: [], texts: [], pems: [], barOpen: false, barCat: null, barDrag: null, barFade: null,
+      aliens: [], world: {}, bullets: [], enemyShots: [], pickups: [], parts: [], texts: [], pems: [], barOpen: false, barCat: null, barDrag: null, barPress: null, barFade: null,
       bar: DEFAULT_BAR.map(it => (it ? { ...it } : null)),
       stars: Array.from({ length: 260 }, () => ({ x: Math.random(), y: Math.random(), z: rnd(0.2, 1) })),
       credits: 0, uridium: 0, exp: 0, honor: 0, cargo: Object.fromEntries(MATERIALS.map(m => [m.key, 0])),
@@ -4058,6 +4058,9 @@
   const mouse = { x: 0, y: 0, holding: false, downAt: 0 };
   canvas.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
   canvas.addEventListener('contextmenu', e => e.preventDefault());
+  // Píxeles que hay que mover con el botón pulsado para pasar de un clic a arrastrar un objeto de la barra
+  const BAR_DRAG_PX = 12;     // píxeles que hay que mover...
+  const BAR_HOLD_MS = 150;    // ...con el botón mantenido al menos este tiempo
   canvas.addEventListener('mousedown', e => {
     // Confirmación de sustitución: mientras esté abierta, solo responden sus botones
     if (g.confirmBoost) {
@@ -4161,7 +4164,7 @@
         if (si >= 0) {
           const item = barSubRow()[si];
           // Modo edición: el objeto se puede arrastrar a una casilla de la barra principal
-          if (item) g.barDrag = { item, x: e.clientX, y: e.clientY };
+          if (item) g.barPress = { item, x: e.clientX, y: e.clientY, t: performance.now() };
           pickBarItem(item, e.detail >= 2);
           return;
         }
@@ -4172,7 +4175,7 @@
     const slot = barSlotAt(e.clientX, e.clientY);
     if (slot >= 0) {
       // Modo edición: arrastrar una casilla la quita de la barra si se suelta fuera; un clic sin arrastrar la usa
-      if (g.barOpen && g.bar[slot]) { g.barDrag = { item: g.bar[slot], x: e.clientX, y: e.clientY, from: slot }; return; }
+      if (g.barOpen && g.bar[slot]) { g.barPress = { item: g.bar[slot], x: e.clientX, y: e.clientY, t: performance.now(), from: slot }; return; }
       useSlot(slot);
       return;
     }
@@ -4212,6 +4215,11 @@
   // Arrastre de la ventana de misiones: sigue al cursor hasta soltar el botón
   addEventListener('mousemove', e => {
     if (g.drag) g[g.drag.key] = { x: e.clientX - g.drag.dx, y: e.clientY - g.drag.dy };
+    // Un clic sobre la barra solo se convierte en arrastre si el ratón se mueve lo suficiente con el botón pulsado
+    if (g.barPress && performance.now() - g.barPress.t >= BAR_HOLD_MS && Math.hypot(e.clientX - g.barPress.x, e.clientY - g.barPress.y) > BAR_DRAG_PX) {
+      g.barDrag = { ...g.barPress, x: e.clientX, y: e.clientY };
+      g.barPress = null;
+    }
     if (g.barDrag) { g.barDrag.x = e.clientX; g.barDrag.y = e.clientY; }
     if (g.matDrag) { g.matDrag.x = e.clientX; g.matDrag.y = e.clientY; }
   });
@@ -4223,6 +4231,11 @@
       const slot = g.refineOpen ? mejorarSlotAt(refineGeom(), e.clientX, e.clientY) : null;
       if (slot) applyBoost(g.matDrag.key, slot);
       g.matDrag = null;
+    }
+    // Clic sin arrastre sobre una casilla de la barra principal: la usa
+    if (g.barPress) {
+      if (g.barPress.from !== undefined) useSlot(g.barPress.from);
+      g.barPress = null;
     }
     if (g.barDrag) { dropBarItem(e.clientX, e.clientY); return; }
     if (!mouse.holding) return;
