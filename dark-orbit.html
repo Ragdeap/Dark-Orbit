@@ -87,7 +87,7 @@
       // Sin base ni estación. Planeta provisional: pendiente de definir
       planet: { x: 19500, y: 4333, r: 700, alpha: 1 },
       portals: [
-        { x: PORTAL_INSET.x, y: PORTAL_INSET.y, to: '2-4' },                       // superior izquierda (bloqueado: 2-4 aún no existe)
+        { x: PORTAL_INSET.x, y: PORTAL_INSET.y, to: '2-4' },                       // superior izquierda
         { x: PORTAL_INSET.x, y: MAP_H - PORTAL_INSET.y, to: '3-4' },               // inferior izquierda
         { x: MAP_W - PORTAL_INSET.x, y: MAP_H - PORTAL_INSET.y, to: '3-2' },       // inferior derecha
       ],
@@ -98,10 +98,100 @@
       // Sin base ni estación. Planeta decorativo, igual que en 3-3
       planet: { x: 19500, y: 4333, r: 700, alpha: 1 },
       portals: [
-        { x: PORTAL_INSET.x, y: PORTAL_INSET.y, to: '1-4' },                       // superior izquierda (bloqueado: 1-4 aún no existe)
+        { x: PORTAL_INSET.x, y: PORTAL_INSET.y, to: '1-4' },                       // superior izquierda
         { x: MAP_W - PORTAL_INSET.x, y: PORTAL_INSET.y, to: '3-3' },               // superior derecha
         { x: MAP_W - PORTAL_INSET.x, y: MAP_H - PORTAL_INSET.y, to: '3-2' },       // inferior derecha
         { x: MAP_W / 2, y: PORTAL_INSET.y, to: null },                             // superior central (bloqueado: destino a mapas altos aún sin definir)
+      ],
+    },
+    {
+      id: '2-1', name: '2-1 · EIC', faction: 'EIC', w: MAP_W, h: MAP_H,
+      bgTop: '#101c34', bgBottom: '#03060e',
+      // Base en la esquina superior derecha, con la estación en la misma posición relativa que en 3-1 (espejada)
+      base: { x: MAP_W - PORTAL_INSET.x, y: PORTAL_INSET.y, r: 1440 },
+      station: { x: MAP_W - PORTAL_INSET.x + 72, y: PORTAL_INSET.y + 51 },
+      planet: { x: 19500, y: 11556, r: 700, alpha: 1, look: 'earth' },
+      portals: [
+        { x: PORTAL_INSET.x, y: MAP_H - PORTAL_INSET.y, to: '2-2' },               // inferior izquierda
+      ],
+    },
+    {
+      id: '2-2', name: '2-2 · EIC', faction: 'EIC', w: MAP_W, h: MAP_H,
+      bgTop: '#0a1e3c', bgBottom: '#020612',
+      // Sin base ni estación
+      planet: { x: 19500, y: 11556, r: 700, alpha: 1, look: 'earth' },
+      portals: [
+        { x: MAP_W - PORTAL_INSET.x, y: PORTAL_INSET.y, to: '2-1' },               // superior derecha
+        { x: MAP_W - PORTAL_INSET.x, y: MAP_H - PORTAL_INSET.y, to: '2-4' },       // inferior derecha
+        { x: PORTAL_INSET.x, y: MAP_H - PORTAL_INSET.y, to: '2-3' },               // inferior izquierda
+      ],
+    },
+    {
+      id: '2-3', name: '2-3 · EIC', faction: 'EIC', w: MAP_W, h: MAP_H,
+      bgTop: '#14284a', bgBottom: '#03060c',
+      // Sin base ni estación
+      planet: { x: 19500, y: 11556, r: 700, alpha: 1, look: 'earth' },
+      portals: [
+        { x: MAP_W - PORTAL_INSET.x, y: PORTAL_INSET.y, to: '2-2' },               // superior derecha
+        { x: MAP_W - PORTAL_INSET.x, y: MAP_H - PORTAL_INSET.y, to: '2-4' },       // inferior derecha
+        { x: PORTAL_INSET.x, y: MAP_H - PORTAL_INSET.y, to: '1-3' },               // inferior izquierda
+      ],
+    },
+    {
+      id: '2-4', name: '2-4 · EIC', faction: 'EIC', w: MAP_W, h: MAP_H,
+      bgTop: '#1a3558', bgBottom: '#040a14',
+      // Sin base ni estación
+      planet: { x: 19500, y: 11556, r: 700, alpha: 1, look: 'earth' },
+      portals: [
+        { x: PORTAL_INSET.x, y: PORTAL_INSET.y, to: '2-2' },                       // superior izquierda
+        { x: MAP_W - PORTAL_INSET.x, y: PORTAL_INSET.y, to: '2-3' },               // superior derecha
+        { x: PORTAL_INSET.x, y: MAP_H - PORTAL_INSET.y, to: '3-3' },               // inferior izquierda
+        { x: MAP_W / 2, y: MAP_H - PORTAL_INSET.y, to: null },                     // inferior central (bloqueado: 4-2 aún sin definir)
+      ],
+    },
+    {
+      id: '1-1', name: '1-1 · MMO', faction: 'MMO', w: MAP_W, h: MAP_H,
+      bgTop: '#2a0c0c', bgBottom: '#080202',
+      // Base en la esquina superior izquierda, con la estación en la misma posición relativa que en 2-1
+      base: { x: PORTAL_INSET.x, y: PORTAL_INSET.y, r: 1440 },
+      station: { x: PORTAL_INSET.x + 72, y: PORTAL_INSET.y + 51 },
+      planet: { x: 19500, y: 11556, r: 700, alpha: 1, look: 'mars' },
+      portals: [
+        { x: MAP_W - PORTAL_INSET.x, y: MAP_H - PORTAL_INSET.y, to: '1-2' },       // inferior derecha
+      ],
+    },
+    {
+      id: '1-2', name: '1-2 · MMO', faction: 'MMO', w: MAP_W, h: MAP_H,
+      bgTop: '#3a1414', bgBottom: '#0a0303',
+      // Sin base ni estación
+      planet: { x: 19500, y: 11556, r: 700, alpha: 1, look: 'mars' },
+      portals: [
+        { x: PORTAL_INSET.x, y: PORTAL_INSET.y, to: '1-1' },                       // superior izquierda
+        { x: MAP_W - PORTAL_INSET.x, y: PORTAL_INSET.y, to: '1-3' },               // superior derecha
+        { x: MAP_W - PORTAL_INSET.x, y: MAP_H - PORTAL_INSET.y, to: '1-4' },       // inferior derecha
+      ],
+    },
+    {
+      id: '1-3', name: '1-3 · MMO', faction: 'MMO', w: MAP_W, h: MAP_H,
+      bgTop: '#42201a', bgBottom: '#0b0503',
+      // Sin base ni estación
+      planet: { x: 19500, y: 11556, r: 700, alpha: 1, look: 'mars' },
+      portals: [
+        { x: PORTAL_INSET.x, y: MAP_H - PORTAL_INSET.y, to: '1-2' },               // inferior izquierda
+        { x: MAP_W - PORTAL_INSET.x, y: PORTAL_INSET.y, to: '2-3' },               // superior derecha
+        { x: MAP_W - PORTAL_INSET.x, y: MAP_H - PORTAL_INSET.y, to: '1-4' },       // inferior derecha
+      ],
+    },
+    {
+      id: '1-4', name: '1-4 · MMO', faction: 'MMO', w: MAP_W, h: MAP_H,
+      bgTop: '#4a2414', bgBottom: '#0c0503',
+      // Sin base ni estación
+      planet: { x: 19500, y: 11556, r: 700, alpha: 1, look: 'mars' },
+      portals: [
+        { x: PORTAL_INSET.x, y: PORTAL_INSET.y, to: '1-2' },                       // superior izquierda
+        { x: MAP_W - PORTAL_INSET.x, y: PORTAL_INSET.y, to: '1-3' },               // superior derecha
+        { x: MAP_W - PORTAL_INSET.x, y: MAP_H - PORTAL_INSET.y, to: '3-4' },       // inferior derecha
+        { x: MAP_W - PORTAL_INSET.x, y: MAP_H / 2, to: null },                     // centro derecha (bloqueado: 4-1 aún sin definir)
       ],
     },
   ];
@@ -3811,14 +3901,22 @@
   }
 
   // Por defecto, el planeta de la vista principal: se mueve más despacio que la nave (parallax)
+  // Colores de cada planeta: halo, discos, bandas y sombras. Venus es el que se usa si no se indica otro
+  const PLANET_LOOK = {
+    venus: { halo: '160,255,150', body: ['#f2ffc8', '#b8d86a', '#4d7a32'], band: '230,255,180', shade: '40,90,40' },
+    earth: { halo: '120,190,255', body: ['#e4f4ff', '#4f9be0', '#1b3f80'], band: '220,240,255', shade: '20,60,130' },
+    mars: { halo: '255,120,90', body: ['#ffd6c4', '#d9663a', '#7a2a14'], band: '255,200,170', shade: '120,40,20' },
+  };
+
   function drawPlanet(pl, cx = W / 2 + (pl.x - g.p.x) * 0.25, cy = H / 2 + (pl.y - g.p.y) * 0.25) {
     ctx.save();
     ctx.globalAlpha = pl.alpha;
 
     // Atmósfera
+    const look = PLANET_LOOK[pl.look] || PLANET_LOOK.venus;
     const halo = ctx.createRadialGradient(cx, cy, pl.r * 0.95, cx, cy, pl.r * 1.25);
-    halo.addColorStop(0, 'rgba(160,255,150,0.45)');
-    halo.addColorStop(1, 'rgba(160,255,150,0)');
+    halo.addColorStop(0, `rgba(${look.halo},0.45)`);
+    halo.addColorStop(1, `rgba(${look.halo},0)`);
     ctx.fillStyle = halo;
     ctx.beginPath();
     ctx.arc(cx, cy, pl.r * 1.25, 0, Math.PI * 2);
@@ -3826,9 +3924,9 @@
 
     // Disco del planeta
     const body = ctx.createRadialGradient(cx - pl.r * 0.35, cy - pl.r * 0.35, pl.r * 0.1, cx, cy, pl.r);
-    body.addColorStop(0, '#f2ffc8');
-    body.addColorStop(0.5, '#b8d86a');
-    body.addColorStop(1, '#4d7a32');
+    body.addColorStop(0, look.body[0]);
+    body.addColorStop(0.5, look.body[1]);
+    body.addColorStop(1, look.body[2]);
     ctx.fillStyle = body;
     ctx.beginPath();
     ctx.arc(cx, cy, pl.r, 0, Math.PI * 2);
@@ -3840,7 +3938,7 @@
     ctx.arc(cx, cy, pl.r, 0, Math.PI * 2);
     ctx.clip();
     for (let i = -3; i <= 3; i++) {
-      ctx.fillStyle = i % 2 ? 'rgba(230,255,180,0.14)' : 'rgba(40,90,40,0.12)';
+      ctx.fillStyle = i % 2 ? `rgba(${look.band},0.14)` : `rgba(${look.shade},0.12)`;
       ctx.fillRect(cx - pl.r, cy + i * pl.r * 0.22, pl.r * 2, pl.r * 0.14);
     }
     ctx.restore();
