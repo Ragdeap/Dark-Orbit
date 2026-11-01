@@ -201,6 +201,8 @@
   const MAIN_ZI = ZONES.findIndex(z => z.id === '3-1');
   const MAIN_BASE = ZONES[MAIN_ZI].base;
   const respawnPoint = () => g.zone.base || MAIN_BASE;
+  // Mapa principal de cada empresa: ahí reaparecen sus bots, en la base general de la empresa
+  const HOME_ZONE = { MMO: '1-1', EIC: '2-1', VRU: '3-1' };
 
   // Niveles del jugador (32). PE necesaria para el nivel N = 10000 * 2^(N - 2); el nivel 1 empieza en 0 PE.
   // unlock: lo que se desbloquea al alcanzar el nivel (los modificadores de la derecha aún no se implementan)
@@ -279,7 +281,7 @@
   const BOT_COOL = 0.8;           // segundos entre disparos
   const BOT_LASER = 'LF1';        // láser equipado por los bots; de momento cualquiera, el de la Fénix por defecto
   const BOT_BULLET_SPEED = 900;
-  const BOT_RESPAWN = 3;          // segundos hasta reaparecer en la base, igual que la nave
+  const BOT_RESPAWN = 5;          // segundos hasta reaparecer en la base de su empresa
   const DEATH_HONOR_LOSS = 0.04;  // fracción del honor que se pierde al morir (bots y jugador)
   const BOT_RADIUS = 16;
   // Nave de los bots: deben ser naves reales del juego. De momento solo la Fénix (la de administrador no es legal)
@@ -1672,7 +1674,8 @@
   }
 
   function respawnBot(b) {
-    const base = ZONES[b.zi].base || MAIN_BASE;
+    b.zi = ZONES.findIndex(z => z.id === HOME_ZONE[b.company]);
+    const base = ZONES[b.zi].base;
     b.dead = false; b.hp = b.maxHp;
     b.x = base.x; b.y = base.y; b.tx = b.x; b.ty = b.y;
     b.wait = 0; b.target = null; b.portal = false; b.hostile = !!b.enemy;
