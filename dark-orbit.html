@@ -853,6 +853,40 @@
     return true;
   }
 
+  // Sonido del motor: un rugido grave de ruido marrón filtrado, en bucle, mientras la nave se mueve de verdad
+  let engineBuf = null, engineNode = null;
+  function startEngineSound() {
+    if (engineNode || !audioCtx) return;
+    if (!engineBuf) {
+      let last = 0;
+      engineBuf = makeTone(2, () => { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; return last * 3.5; });
+    }
+    const src = audioCtx.createBufferSource(), filter = audioCtx.createBiquadFilter(), gain = audioCtx.createGain();
+    src.buffer = engineBuf;
+    src.loop = true;
+    filter.type = 'lowpass';
+    filter.frequency.value = 400;
+    gain.gain.value = 0;
+    src.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioCtx.destination);
+    src.start();
+    gain.gain.setTargetAtTime(0.25, audioCtx.currentTime, 0.2);
+    engineNode = { src, gain };
+  }
+  function stopEngineSound() {
+    if (!engineNode || !audioCtx) return;
+    const { src, gain } = engineNode;
+    engineNode = null;
+    gain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.1);
+    src.stop(audioCtx.currentTime + 0.5);
+  }
+    // Mismo umbral que la llama de propulsión: suena cuando la velocidad supera 20
+  function updateEngineSound() {
+    const moving = !g.p.dead && Math.hypot(g.p.vx, g.p.vy) > 20;
+    if (moving) startEngineSound(); else stopEngineSound();
+  }
+
   // Sonido de reparación: un tono suave que pulsa en cada tick (REPAIR_POP) mientras el robot cura, y calla al terminar
   let repairNode = null;
   function startRepairSound() {
@@ -1322,6 +1356,7 @@
     tickBoosts(dt);
     updateRadiation(dt);
     updateRepair(dt);
+    updateEngineSound();
 
     // Protección de llegada: se corta al salir del anillo. El combate se agota solo y devuelve la protección
     if (p.spawnT > 0 && !inNaz()) p.spawnT = 0;
@@ -3762,7 +3797,7 @@
     const win = minimapWinGeom(), mw = 200, mh = 130, mx = win.x + (dangerBarShown() ? 26 : 8), my = win.y + 38, z = g.zone;
     const s = Math.min(mw / z.w, mh / z.h);
     const ox = mx + (mw - z.w * s) / 2, oy = my + (mh - z.h * s) / 2;
-    return { mw, mh, mx, my, s, ox, oy };
+    return { mw, mh, mx, my, s, ox, oy, x: mx, y: my, w: mw, h: mh };
   }
 
   // Icono del minimapa colapsado: un recuadro con la cruz de la nave
