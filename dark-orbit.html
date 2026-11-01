@@ -951,7 +951,35 @@
 
   // Sonido de aviso: suena, hace una pausa y vuelve a sonar mientras la nave esté en la zona de radiación
   const WARNING_GAP = 1500;   // ms de silencio entre una reproducción y la siguiente
-  let warnBuf = null, warnSrc = null, warnLoading = false, warnTimer = null, warnActive = false;
+  // Sonidos generados en el propio juego. makeTone crea un buffer de "seconds" segundos a partir de sample(t)
+  function makeTone(seconds, sample) {
+    const rate = audioCtx.sampleRate;
+    const buf = audioCtx.createBuffer(1, Math.floor(rate * seconds), rate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = sample(i / rate);
+    return buf;
+  }
+
+  // Inicio de sesión: tres notas suaves de campanilla, una tras otra
+  function loginSample(t) {
+    let v = 0;
+    [[523.25, 0], [659.25, 0.18], [783.99, 0.36]].forEach(([f, t0]) => {
+      const dt = t - t0;
+      if (dt >= 0) v += Math.sin(2 * Math.PI * f * dt) * Math.exp(-dt * 5) * 0.18;
+    });
+    return v;
+  }
+
+  // Alerta de zona de peligro: dos pitidos suaves, con subida y bajada progresivas
+  function warningSample(t) {
+    const beep = (t0) => {
+      const dt = t - t0;
+      return dt >= 0 && dt < 0.25 ? Math.sin(2 * Math.PI * 740 * dt) * Math.sin(Math.PI * dt / 0.25) ** 2 * 0.15 : 0;
+    };
+    return beep(0) + beep(0.45);
+  }
+
+  let warnBuf = null, warnSrc = null, warnTimer = null, warnActive = false;
   function playWarning() {
     if (warnSrc || !warnBuf || !audioCtx) return;
     const src = audioCtx.createBufferSource();
@@ -968,15 +996,9 @@
 
   function startWarning() {
     warnActive = true;
-    if (warnSrc || warnTimer || warnLoading || !audioCtx) return;
-    if (warnBuf) { playWarning(); return; }
-    warnLoading = true;
-    fetch('sonidos/Warning.opus')
-      .then(r => r.arrayBuffer())
-      .then(b => audioCtx.decodeAudioData(b))
-      .then(buf => { warnBuf = buf; })
-      .catch(() => {})   // Sin audio disponible: el juego sigue funcionando
-      .finally(() => { warnLoading = false; });
+    if (warnSrc || warnTimer || !audioCtx) return;
+    if (!warnBuf) warnBuf = makeTone(0.7, warningSample);
+    playWarning();
   }
 
   // Al salir de la zona no se corta el sonido que está sonando: solo se cancela la siguiente repetición
@@ -4356,16 +4378,10 @@
   function playLoginSound() {
     try {
       if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      fetch('sonidos/Login.opus')
-        .then(r => r.arrayBuffer())
-        .then(b => audioCtx.decodeAudioData(b))
-        .then(buf => {
-          const src = audioCtx.createBufferSource();
-          src.buffer = buf;
-          src.connect(audioCtx.destination);
-          src.start();
-        })
-        .catch(() => {});   // Sin audio disponible: el juego sigue funcionando
+      const src = audioCtx.createBufferSource();
+      src.buffer = makeTone(1.5, loginSample);
+      src.connect(audioCtx.destination);
+      src.start();
     } catch (err) {
       // Sin audio disponible: el juego sigue funcionando
     }
