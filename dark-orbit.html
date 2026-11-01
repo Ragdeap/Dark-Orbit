@@ -2302,8 +2302,17 @@
   const formatNum = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 
   // Minimizada es un icono abajo a la izquierda; abierta, una ventana arrastrable
+  // Orden de los iconos de ventana en la barra superior izquierda. Solo ocupan hueco los visibles, y el hangar solo existe dentro de la base
+  const WIN_ICON_ORDER = ['mission', 'player', 'nave', 'refine', 'minimap', 'hangar'];
+  function winIconGeom(key) {
+    const shown = WIN_ICON_ORDER.filter(k => k !== 'hangar' || inBase());
+    return { x: 16 + shown.indexOf(key) * 44, y: 16, w: 36, h: 36 };
+  }
+
+  function playerIconGeom() { return winIconGeom('player'); }
+
   function playerGeom() {
-    if (!g.playerOpen) return { x: W - 96, y: 16, w: 36, h: 36 };
+    if (!g.playerOpen) return playerIconGeom();
     const pos = g.playerPos || { x: 16, y: H - PLAYER_H - 60 };
     const x = clamp(pos.x, 0, W - PLAYER_W), y = clamp(pos.y, 0, H - PLAYER_H);
     return { x, y, w: PLAYER_W, h: PLAYER_H, close: { x: x + PLAYER_W - 26, y: y + 6, w: 20, h: 20 } };
@@ -2317,6 +2326,13 @@
     ctx.beginPath();
     ctx.arc(cx, cy + size * 0.45, size * 0.4, Math.PI, 0);
     ctx.fill();
+  }
+
+  // Icono de una ventana: en gris mientras la ventana está abierta (en uso), igual que el hangar fuera de la base
+  function drawWinIcon(draw, b, open) {
+    ctx.filter = open ? 'grayscale(1) brightness(0.55)' : 'none';
+    draw(b);
+    ctx.filter = 'none';
   }
 
   function drawPlayerIcon(b) {
@@ -2426,7 +2442,8 @@
   function drawPlayerWindow() {
     const b = playerGeom();
     ctx.save();
-    if (!g.playerOpen) { drawPlayerIcon(b); ctx.restore(); return; }
+    drawWinIcon(drawPlayerIcon, playerIconGeom(), g.playerOpen);
+    if (!g.playerOpen) { ctx.restore(); return; }
     ctx.fillStyle = '#0b1424';
     ctx.fillRect(b.x, b.y, b.w, b.h);
     ctx.strokeStyle = '#ffd166';
@@ -2473,8 +2490,10 @@
   const NAVE_W = 340, NAVE_H = 114;
 
   // Minimizada es un icono junto a los de usuario y misiones; abierta, una ventana arrastrable
+  function naveIconGeom() { return winIconGeom('nave'); }
+
   function naveGeom() {
-    if (!g.naveOpen) return { x: W - 140, y: 16, w: 36, h: 36 };
+    if (!g.naveOpen) return naveIconGeom();
     const pos = g.navePos || { x: 16, y: 190 };
     const x = clamp(pos.x, 0, W - NAVE_W), y = clamp(pos.y, 0, H - NAVE_H);
     return { x, y, w: NAVE_W, h: NAVE_H, close: { x: x + NAVE_W - 26, y: y + 6, w: 20, h: 20 } };
@@ -2577,7 +2596,8 @@
   function drawNaveWindow() {
     const b = naveGeom();
     ctx.save();
-    if (!g.naveOpen) { drawNaveIcon(b); ctx.restore(); return; }
+    drawWinIcon(drawNaveIcon, naveIconGeom(), g.naveOpen);
+    if (!g.naveOpen) { ctx.restore(); return; }
     ctx.fillStyle = '#0b1424';
     ctx.fillRect(b.x, b.y, b.w, b.h);
     ctx.strokeStyle = '#ffd166';
@@ -2737,8 +2757,10 @@
     return g.missions.length < MAX_MISSIONS && g.nextMission < MISSIONS.length;
   }
 
+  function missionIconGeom() { return winIconGeom('mission'); }
+
   function missionPanelGeom() {
-    if (!g.missionOpen) return { x: W - 52, y: 16, w: 36, h: 36 };
+    if (!g.missionOpen) return missionIconGeom();
     const w = 300, h = 190;
     // Por defecto arriba a la derecha; si se ha arrastrado, se queda en la posición elegida (dentro de la pantalla)
     const pos = g.missionPos || { x: W - w - 16, y: 64 };
@@ -2815,7 +2837,8 @@
   function drawMissionPanel() {
     const b = missionPanelGeom();
     ctx.save();
-    if (!g.missionOpen) { drawMissionIcon(b); ctx.restore(); return; }
+    drawWinIcon(drawMissionIcon, missionIconGeom(), g.missionOpen);
+    if (!g.missionOpen) { ctx.restore(); return; }
     ctx.fillStyle = '#0b1424';
     ctx.fillRect(b.x, b.y, b.w, b.h);
     ctx.strokeStyle = '#ffd166';
@@ -3048,8 +3071,10 @@
     ctx.restore();
   }
 
+  function refineIconGeom() { return winIconGeom('refine'); }
+
   function refineGeom() {
-    if (!g.refineOpen) return { x: W - 228, y: 16, w: 36, h: 36 };
+    if (!g.refineOpen) return refineIconGeom();
     const pos = g.refinePos || { x: Math.max(0, (W - REF_W) / 2), y: 40 };
     const x = clamp(pos.x, 0, W - REF_W), y = clamp(pos.y, 0, H - REF_H);
     return { x, y, w: REF_W, h: REF_H, close: { x: x + REF_W - 26, y: y + 6, w: 20, h: 20 } };
@@ -3223,7 +3248,8 @@
   function drawRefineWindow() {
     const b = refineGeom();
     ctx.save();
-    if (!g.refineOpen) { drawRefineIcon(b); ctx.restore(); return; }
+    drawWinIcon(drawRefineIcon, refineIconGeom(), g.refineOpen);
+    if (!g.refineOpen) { ctx.restore(); return; }
     ctx.fillStyle = '#0b1424';
     ctx.fillRect(b.x, b.y, b.w, b.h);
     ctx.strokeStyle = '#ffd166';
@@ -3269,24 +3295,23 @@
 
   // ---------- Hangar ----------
   // Icono del hangar, arriba a la derecha junto a los de nave, usuario y misiones
-  function hangarIconGeom() { return { x: W - 184, y: 16, w: 36, h: 36 }; }
+  function hangarIconGeom() { return winIconGeom('hangar'); }
 
   function inBase() {
     const z = g.zone, p = g.p;
     return !!z.base && dist(p.x, p.y, z.base.x, z.base.y) < z.base.r;
   }
 
-  // Icono del hangar: solo se abre dentro de la base; fuera aparece apagado
+  // Icono del hangar: solo aparece dentro de la base; abierto se ve en gris como el resto de ventanas
   function drawHangarIcon(b) {
     const hover = inBox(b, mouse.x, mouse.y);
-    const on = inBase();
-    const col = on ? '#ffd166' : '#5f6e84';
+    const col = '#ffd166';
     const bg = ctx.createLinearGradient(0, b.y, 0, b.y + b.h);
     bg.addColorStop(0, '#1b2a44');
     bg.addColorStop(1, '#070d18');
     ctx.fillStyle = bg;
     ctx.fillRect(b.x, b.y, b.w, b.h);
-    ctx.strokeStyle = hover && on ? '#fff0b3' : col;
+    ctx.strokeStyle = hover ? '#fff0b3' : col;
     ctx.lineWidth = 2;
     ctx.strokeRect(b.x + 1, b.y + 1, b.w - 2, b.h - 2);
     // Edificio del hangar: cubierta curva con puerta
@@ -3303,7 +3328,7 @@
     ctx.lineTo(cx + 4, cy + 1);
     ctx.lineTo(cx + 4, cy + 7);
     ctx.stroke();
-    if (hover) drawIconTooltip(b, on ? 'Hangar' : 'Hangar (solo en la base)');
+    if (hover) drawIconTooltip(b, 'Hangar');
   }
 
   // Distribución del hangar: se adapta al número de naves, ranuras y láseres
@@ -3396,8 +3421,6 @@
 
   function drawHangar() {
     const L = hangarLayout();
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = 'rgba(8,16,32,0.96)';
     ctx.fillRect(L.px, L.py, L.pw, L.ph);
     ctx.strokeStyle = 'rgba(150,200,255,0.75)';
@@ -3787,8 +3810,10 @@
   // La barra de peligrosidad solo existe en los mapas X1 y X2 (segundo número 1 o 2), como ayuda para jugadores nuevos
   function dangerBarShown() { return /-[12]$/.test(g.zone.id); }
 
+  function minimapIconGeom() { return winIconGeom('minimap'); }
+
   function minimapWinGeom() {
-    if (!g.mapOpen) return { x: W - 272, y: 16, w: 36, h: 36 };
+    if (!g.mapOpen) return minimapIconGeom();
     const w = dangerBarShown() ? MINIMAP_WIN_W : MINIMAP_WIN_W - 20;
     const pos = g.mapPos || { x: W - w - 16, y: H - MINIMAP_WIN_H - 16 };
     const x = clamp(pos.x, 0, W - w), y = clamp(pos.y, 0, H - MINIMAP_WIN_H);
@@ -3847,7 +3872,8 @@
   function drawMinimap() {
     const win = minimapWinGeom();
     ctx.save();
-    if (!g.mapOpen) { drawMapIcon(win); ctx.restore(); return; }
+    drawWinIcon(drawMapIcon, minimapIconGeom(), g.mapOpen);
+    if (!g.mapOpen) { ctx.restore(); return; }
     ctx.fillStyle = '#0b1424';
     ctx.fillRect(win.x, win.y, win.w, win.h);
     ctx.strokeStyle = '#ffd166';
@@ -4035,8 +4061,9 @@
     drawPlayerWindow();
     drawNaveWindow();
     drawRefineWindow();
+    if (g.hangar.open) drawHangar();
     drawBoostConfirm();
-    drawHangarIcon(hangarIconGeom());
+    if (inBase()) drawWinIcon(drawHangarIcon, hangarIconGeom(), g.hangar.open);
     drawActionBar();
     drawSafeMsg();
     drawRadiationWarning();
@@ -4053,7 +4080,6 @@
       drawCenter('PAUSA', '#ffffff', 36, 1, H / 2);
       drawCenter('P / Esc para continuar', '#9fb3c8', 16, 0.9, H / 2 + 40);
     }
-    if (g.hangar.open) drawHangar();
     drawCursor();
   }
 
@@ -4074,12 +4100,19 @@
     }
     // Nave destruida: solo el menú de reaparición responde a los clics
     if (g.p.dead) { const i = reviveIndexAt(e.clientX, e.clientY); if (i >= 0) revive(reviveOptions()[i].id); return; }
-    if (g.hangar.open) { hangarClick(e.clientX, e.clientY); return; }
-    // Icono del hangar: abre el hangar solo dentro de la base
-    if (inBox(hangarIconGeom(), e.clientX, e.clientY)) {
-      if (inBase()) g.hangar.open = true;
-      return;
+    // Icono del hangar: solo existe dentro de la base; un clic lo abre o lo cierra
+    if (inBase() && inBox(hangarIconGeom(), e.clientX, e.clientY)) { g.hangar.open = !g.hangar.open; return; }
+    // Panel del hangar: dentro responde el hangar; fuera el clic sigue llegando al juego
+    if (g.hangar.open) {
+      const L = hangarLayout();
+      if (e.clientX >= L.px && e.clientX <= L.px + L.pw && e.clientY >= L.py && e.clientY <= L.py + L.ph) { hangarClick(e.clientX, e.clientY); return; }
     }
+    // Iconos de ventana, arriba a la izquierda: un clic abre o cierra su ventana, también con la ventana abierta
+    const winIcon = [
+      ['missionOpen', missionIconGeom()], ['mapOpen', minimapIconGeom()], ['playerOpen', playerIconGeom()],
+      ['naveOpen', naveIconGeom()], ['refineOpen', refineIconGeom()],
+    ].find(([, b]) => inBox(b, e.clientX, e.clientY));
+    if (winIcon) { g[winIcon[0]] = !g[winIcon[0]]; return; }
     // Ventana de misiones: el cuadrado la abre; el botón X la minimiza. Un clic dentro no mueve la nave
     const mp = missionPanelGeom();
     if (e.clientX >= mp.x && e.clientX <= mp.x + mp.w && e.clientY >= mp.y && e.clientY <= mp.y + mp.h) {
@@ -4311,10 +4344,8 @@
   }
 
   addEventListener('keydown', e => {
-    if (g.hangar.open) {
-      if (e.code === 'Escape') g.hangar.open = false;
-      return;
-    }
+    // Esc cierra el hangar; mientras está abierto el juego sigue y las teclas de combate responden
+    if (g.hangar.open && e.code === 'Escape') { g.hangar.open = false; return; }
     if (e.code === 'ControlLeft' || e.code === 'ControlRight') {
       e.preventDefault();
       if (!e.repeat && !g.paused) toggleAttack();
@@ -4413,11 +4444,12 @@
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
-    if (!g.paused && !g.hangar.open) {
+    if (!g.paused) {
       update(dt);
       checkTravel();
       if (!stationNear()) g.stationOpen = false;   // al alejarse, la venta se cierra
     }
+    if (!inBase()) g.hangar.open = false;   // el icono del hangar solo existe en la base
     draw();
     saveT += dt;
     if (saveT >= SAVE_EVERY) { saveT = 0; saveGame(); }
