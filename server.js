@@ -15,6 +15,7 @@ const RANKS_DIR = path.join(ROOT, 'rangos');
 const COMPANIES_DIR = path.join(ROOT, 'empresas');
 const SOUNDS_DIR = path.join(ROOT, 'sonidos');
 const EXTRAS_FILE = path.join(ROOT, 'extras.json');
+const MISSIONS_FILE = path.join(ROOT, 'misiones.json');
 const DATA_DIR = path.join(ROOT, 'data');
 const SAVE_FILE = path.join(DATA_DIR, 'save.json');
 const MAX_BODY = 1024 * 1024;
@@ -23,7 +24,7 @@ const MAX_BODY = 1024 * 1024;
 function staticFile(pathname) {
   if (pathname === '/') return GAME;
   const file = path.normalize(path.join(ROOT, decodeURIComponent(pathname)));
-  if (file === GAME || file === EXTRAS_FILE) return file;
+  if (file === GAME || file === EXTRAS_FILE || file === MISSIONS_FILE) return file;
   const dir = path.dirname(file), ext = path.extname(file);
   if ((dir === RANKS_DIR || dir === COMPANIES_DIR) && ext === '.svg') return file;
   if (dir === SOUNDS_DIR && ext === '.opus') return file;

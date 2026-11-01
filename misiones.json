@@ -1,0 +1,63 @@
+[
+  {
+    "title": "Primeros pasos",
+    "description": "Los Streuner rondan la base de la zona {zone} y pueden poner en peligro a los nuevos pilotos. Derrota a dos de ellos para demostrar que estás listo para la misión.",
+    "text": "Derrota 2 Streuner en la zona {zone}",
+    "type": "streuner",
+    "count": 2,
+    "zone": "home",
+    "rewards": {
+      "credits": 100
+    },
+    "level": 1
+  },
+  {
+    "title": "Cazador de Streuner",
+    "description": "Los Streuner de esta zona llevan días atacando a los convoyes que cruzan el sector. Elimina a ocho de ellos para asegurar la ruta hacia la base.",
+    "text": "Elimina 8 Streuner",
+    "type": "streuner",
+    "count": 8,
+    "rewards": {
+      "credits": 200
+    },
+    "level": 1
+  },
+  {
+    "title": "Reconocimiento",
+    "description": "Un satélite ha detectado una señal sin identificar en la posición 200 / 120. Acude allí y confirma qué está pasando.",
+    "text": "Viaja a la posición 200 / 120",
+    "type": "travel",
+    "count": 1,
+    "to": {
+      "x": 24000,
+      "y": 14400
+    },
+    "radius": 150,
+    "rewards": {
+      "credits": 300
+    },
+    "level": 1
+  },
+  {
+    "title": "Caza de reclutas",
+    "description": "Los Recruit Streuner han empezado a reagruparse cerca de la frontera. Reduce su número antes de que vuelvan a atacar.",
+    "text": "Elimina 6 Recruit Streuner",
+    "type": "recruit",
+    "count": 6,
+    "rewards": {
+      "credits": 350
+    },
+    "level": 1
+  },
+  {
+    "title": "Caza de ayudantes",
+    "description": "Los Aider Streuner protegen a los reclutas en esta zona. Elimina a seis de ellos para despejar el camino.",
+    "text": "Elimina 6 Aider Streuner",
+    "type": "aider",
+    "count": 6,
+    "rewards": {
+      "credits": 350
+    },
+    "level": 1
+  }
+]
