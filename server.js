@@ -14,6 +14,7 @@ const GAME = path.join(ROOT, 'dark-orbit.html');
 const RANKS_DIR = path.join(ROOT, 'rangos');
 const COMPANIES_DIR = path.join(ROOT, 'empresas');
 const SOUNDS_DIR = path.join(ROOT, 'sonidos');
+const FENIX_DIR = path.join(ROOT, 'sprites', 'fenix');
 const EXTRAS_FILE = path.join(ROOT, 'extras.json');
 const MISSIONS_FILE = path.join(ROOT, 'misiones.json');
 const DATA_DIR = path.join(ROOT, 'data');
@@ -28,6 +29,7 @@ function staticFile(pathname) {
   const dir = path.dirname(file), ext = path.extname(file);
   if ((dir === RANKS_DIR || dir === COMPANIES_DIR) && ext === '.svg') return file;
   if (dir === SOUNDS_DIR && ext === '.opus') return file;
+  if (dir === FENIX_DIR && (ext === '.png' || ext === '.json')) return file;
   return null;
 }
 
@@ -81,7 +83,7 @@ const server = http.createServer(async (req, res) => {
   }
   fs.readFile(file, (err, data) => {
     if (err) { res.writeHead(404); res.end(); return; }
-    const type = { '.svg': 'image/svg+xml', '.opus': 'audio/ogg', '.json': 'application/json; charset=utf-8' }[path.extname(file)] || 'text/html; charset=utf-8';
+    const type = { '.svg': 'image/svg+xml', '.png': 'image/png', '.opus': 'audio/ogg', '.json': 'application/json; charset=utf-8' }[path.extname(file)] || 'text/html; charset=utf-8';
     res.writeHead(200, { 'Content-Type': type });
     res.end(data);
   });

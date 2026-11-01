@@ -308,7 +308,8 @@
   // Base de datos de naves. Para añadir una nave basta con añadir una entrada aquí;
   // sus ranuras de láser se crean automáticamente.
   const SHIPS = {
-    PHOENIX: { name: 'Phoenix', hp: 104000, speed: 320, slots: 1, missSlots: 1, genSlots: 1, extraSlots: 1, cargo: 100 },
+    PHOENIX: { name: 'Phoenix', hp: 104000, speed: 320, slots: 1, missSlots: 1, genSlots: 1, extraSlots: 1, cargo: 100,
+      engines: [{ x: -41, z: 9 }, { x: -41, z: -9 }], flame: { len: 22, w: 4 } },
     LIBERATOR: { name: 'Liberator', hp: 116000, speed: 300, slots: 4, missSlots: 1, genSlots: 6, extraSlots: 2, cargo: 400 },
   };
   // Catálogo de extras: se carga de extras.json al arrancar. Si no se puede leer, no hay extras
@@ -2246,39 +2247,94 @@
     ctx.restore();
   }
 
+  // Llamas de cada motor de la Fénix: salen de la tobera, con la misma orientación y cámara que el sprite
+  function drawFenixFlames(cx, cy, angle) {
+    const deg = angle * 180 / Math.PI;
+    const k = ((Math.round((deg - 180) / 11.25) % FENIX.count) + FENIX.count) % FENIX.count;
+    const phi = (180 - k * 11.25) * Math.PI / 180;
+    const cp = Math.cos(phi), sp = Math.sin(phi), ce = Math.cos(FENIX.tilt), se = Math.sin(FENIX.tilt);
+    // Hacia atrás de la nave en pantalla (el morro apunta a (cp, -sp*se))
+    const back = norm2(-cp, sp * se);
+    const perp = [-back[1], back[0]];
+    for (const e of SHIPS[g.shipId].engines) {
+      // Tobera en el plano del suelo (Y = 0): su posición en pantalla. La llama arranca 3 px dentro del motor,
+      // para que el sprite la tape en la base y no parezca que sale de debajo cuando la nave mira hacia arriba
+      const wx = e.x * cp - e.z * sp, wz = e.x * sp + e.z * cp;
+      const ex = cx + wx - back[0] * 3, ey = cy - wz * se - back[1] * 3;
+      const len = SHIPS[g.shipId].flame.len * (0.85 + rnd(0, 0.3));
+      const w = SHIPS[g.shipId].flame.w;
+      const tipX = ex + back[0] * len, tipY = ey + back[1] * len;
+      const grad = ctx.createLinearGradient(ex, ey, tipX, tipY);
+      grad.addColorStop(0, 'rgba(255,255,255,0.95)');
+      grad.addColorStop(0.3, 'rgba(255,209,102,0.9)');
+      grad.addColorStop(1, 'rgba(255,90,31,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(ex + perp[0] * w, ey + perp[1] * w);
+      ctx.lineTo(tipX, tipY);
+      ctx.lineTo(ex - perp[0] * w, ey - perp[1] * w);
+      ctx.fill();
+      // Núcleo más claro, para dar volumen a la llama
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.beginPath();
+      ctx.moveTo(ex + perp[0] * w * 0.45, ey + perp[1] * w * 0.45);
+      ctx.lineTo(ex + back[0] * len * 0.6, ey + back[1] * len * 0.6);
+      ctx.lineTo(ex - perp[0] * w * 0.45, ey - perp[1] * w * 0.45);
+      ctx.fill();
+    }
+  }
+
+  function norm2(x, y) {
+    const l = Math.hypot(x, y);
+    return [x / l, y / l];
+  }
+
+  function drawFenix(cx, cy, angle) {
+    const deg = angle * 180 / Math.PI;
+    const k = ((Math.round((deg - 180) / 11.25) % FENIX.count) + FENIX.count) % FENIX.count;
+    ctx.drawImage(FENIX.frames[k], cx - FENIX.pivot.x, cy - FENIX.pivot.y);
+  }
+
   function drawPlayer() {
     const p = g.p;
     if (p.dead) return;
     const cx = W / 2, cy = H / 2;
+    const moving = Math.hypot(p.vx, p.vy) > 20;
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(p.angle);
-    if (Math.hypot(p.vx, p.vy) > 20) {
-      ctx.fillStyle = '#ffb347';
+    if (!FENIX) {
+      if (moving) {
+        ctx.fillStyle = '#ffb347';
+        ctx.beginPath();
+        ctx.moveTo(-10, -4); ctx.lineTo(-22 - rnd(0, 6), 0); ctx.lineTo(-10, 4);
+        ctx.fill();
+      }
       ctx.beginPath();
-      ctx.moveTo(-10, -4); ctx.lineTo(-22 - rnd(0, 6), 0); ctx.lineTo(-10, 4);
+      ctx.moveTo(14, 0); ctx.lineTo(-10, 8); ctx.lineTo(-6, 0); ctx.lineTo(-10, -8); ctx.closePath();
+      ctx.fillStyle = '#d7e6ff';
       ctx.fill();
+      ctx.strokeStyle = '#5aa8ff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
     }
-    ctx.beginPath();
-    ctx.moveTo(14, 0); ctx.lineTo(-10, 8); ctx.lineTo(-6, 0); ctx.lineTo(-10, -8); ctx.closePath();
-    ctx.fillStyle = '#d7e6ff';
-    ctx.fill();
-    ctx.strokeStyle = '#5aa8ff';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
     ctx.restore();
+    if (FENIX) {
+      if (moving && SHIPS[g.shipId].engines) drawFenixFlames(cx, cy, p.angle);
+      drawFenix(cx, cy, p.angle);
+    }
     if (repairActive) drawRepairBot(cx, cy);
     // Barras sobre la nave: la vida siempre; el escudo sólo si hay escudo equipado y le queda carga
     const bw = 40, bx = cx - bw / 2;
-    bar(bx, cy - 30, bw, 4, p.hp / p.maxHp, '#5dff8a');
-    if (p.maxShield > 0 && p.shield > 0) bar(bx, cy - 36, bw, 3, p.shield / p.maxShield, '#5ac8ff');
+    bar(bx, cy - 40, bw, 4, p.hp / p.maxHp, '#5dff8a');
+    if (p.maxShield > 0 && p.shield > 0) bar(bx, cy - 46, bw, 3, p.shield / p.maxShield, '#5ac8ff');
     // Aviso mientras dura el efecto del misil ralentizador
     if (p.slowT > 0) {
       ctx.save();
       ctx.font = 'bold 11px Consolas, monospace';
       ctx.textAlign = 'center';
       ctx.fillStyle = '#7fe7ff';
-      ctx.fillText(`RALENTIZADO ${Math.ceil(p.slowT)} s`, cx, cy - 46);
+      ctx.fillText(`RALENTIZADO ${Math.ceil(p.slowT)} s`, cx, cy - 56);
       ctx.restore();
     }
     // Nombre del jugador debajo de la nave: blanco y grueso, con borde negro
@@ -2288,12 +2344,12 @@
     ctx.lineJoin = 'round';
     ctx.lineWidth = 3;
     ctx.strokeStyle = '#000000';
-    ctx.strokeText(PLAYER_NAME, cx, cy + 36);
+    ctx.strokeText(PLAYER_NAME, cx, cy + 46);
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(PLAYER_NAME, cx, cy + 36);
+    ctx.fillText(PLAYER_NAME, cx, cy + 46);
     const nameW = ctx.measureText(PLAYER_NAME).width;
-    if (p.rank != null) drawRank(p.rank, cx - nameW / 2 - 4, cy + 36 - 6);
-    drawCompany(p.company, cx + nameW / 2 + 4, cy + 36 - 6);
+    if (p.rank != null) drawRank(p.rank, cx - nameW / 2 - 4, cy + 46 - 6);
+    drawCompany(p.company, cx + nameW / 2 + 4, cy + 46 - 6);
     ctx.restore();
   }
 
@@ -4751,6 +4807,20 @@
       .catch(() => {});   // Sin catálogo: el juego sigue, sin extras
   }
 
+  // Sprites 2,5D de la Fénix: 32 frames de 11,25° cargados al arrancar. Sin ellos se dibuja el polígono de siempre
+  let FENIX = null;
+  function loadFenix() {
+    return fetch('sprites/fenix/frames.json')
+      .then(r => r.json())
+      .then(data => Promise.all(data.frames.map(f => new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = 'sprites/fenix/' + f.file;
+      }))).then(imgs => { FENIX = { frames: imgs, pivot: data.pivot, count: imgs.length, tilt: data.tiltDeg * Math.PI / 180 }; }))
+      .catch(() => {});
+  }
+
   // Catálogo de misiones: sin misiones.json no hay misiones, pero el juego sigue
   function loadMissions() {
     return fetch('misiones.json')
@@ -4760,7 +4830,7 @@
   }
 
   // El botón de entrar se activa cuando el progreso y los catálogos de extras y misiones están cargados
-  Promise.all([readSave(), loadExtras(), loadMissions()]).then(([d]) => {
+  Promise.all([readSave(), loadExtras(), loadMissions(), loadFenix()]).then(([d]) => {
     if (!loadGame(d)) reset();
     addEventListener('pagehide', saveGame);
     const entrar = document.getElementById('entrar');
