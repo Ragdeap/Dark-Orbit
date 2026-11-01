@@ -20,7 +20,8 @@
     "flame": {
       "len": 30,
       "w": 7
-    }
+    },
+    "inicial": true
   },
   "LIBERATOR": {
     "name": "Liberator",
@@ -47,6 +48,10 @@
     "flame": {
       "len": 22,
       "w": 5
+    },
+    "precio": {
+      "moneda": "credits",
+      "valor": 40000
     }
   },
   "PIRANHA": {
@@ -74,6 +79,10 @@
     "flame": {
       "len": 24,
       "w": 4
+    },
+    "precio": {
+      "moneda": "credits",
+      "valor": 100000
     }
   },
   "NOSTROMO": {
@@ -101,6 +110,10 @@
     "flame": {
       "len": 22,
       "w": 4
+    },
+    "precio": {
+      "moneda": "credits",
+      "valor": 195000
     }
   },
   "BIGBOY": {
@@ -128,6 +141,10 @@
     "flame": {
       "len": 26,
       "w": 6
+    },
+    "precio": {
+      "moneda": "credits",
+      "valor": 285000
     }
   },
   "LEONOV": {
@@ -155,6 +172,10 @@
     "flame": {
       "len": 28,
       "w": 5
+    },
+    "precio": {
+      "moneda": "uridium",
+      "valor": 15000
     }
   },
   "VENGEANCE": {
@@ -182,6 +203,10 @@
     "flame": {
       "len": 26,
       "w": 4
+    },
+    "precio": {
+      "moneda": "uridium",
+      "valor": 30000
     }
   },
   "GOLIATH": {
@@ -209,6 +234,10 @@
     "flame": {
       "len": 30,
       "w": 6
+    },
+    "precio": {
+      "moneda": "uridium",
+      "valor": 80000
     }
   }
 }

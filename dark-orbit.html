@@ -453,6 +453,7 @@
       extras: {},
       inv: { lasers: { LF1: 1 }, generators: {}, missiles: {}, extras: { REP1: 1 }, ships: { PHOENIX: 1 } }, // PRUEBA: sólo la Phoenix; añadir aquí las naves que se quieran probar
       hangar: { open: false, sel: { type: 'laser', i: 0 } },
+      shopOpen: false, shopPos: null, shop: { cat: 'ships', sel: null, qty: 1, confirm: false, scroll: 0, search: null, playing: true, spin: 0 },
       allies: BOTS.map((b, i) => ({
         id: i, name: b.name, zi: ZONES.findIndex(z => z.id === b.zone), exp: 0, honor: 0,
         x: b.x, y: b.y, angle: 0, tx: b.x, ty: b.y, portal: false, target: null, cool: 0, wait: 0, hopT: rnd(30, 90),
@@ -2610,7 +2611,7 @@
 
   // Minimizada es un icono abajo a la izquierda; abierta, una ventana arrastrable
   // Orden de los iconos de ventana en la barra superior izquierda. Solo ocupan hueco los visibles, y el hangar solo existe dentro de la base
-  const WIN_ICON_ORDER = ['mission', 'player', 'nave', 'refine', 'minimap', 'hangar'];
+  const WIN_ICON_ORDER = ['mission', 'player', 'nave', 'refine', 'minimap', 'shop', 'hangar'];
   function winIconGeom(key) {
     const shown = WIN_ICON_ORDER.filter(k => k !== 'hangar' || inBase());
     return { x: 16 + shown.indexOf(key) * 44, y: 16, w: 36, h: 36 };
@@ -3816,6 +3817,598 @@
     ctx.restore();
   }
 
+  // ---------- Tienda ----------
+  // Ventana integrada con el diseño de la maqueta "Tienda · Naves" (1280 x 720), reducida a 1000 x 562 px.
+  // Secciones abiertas: naves, láseres, generadores y extras. El resto se ve bloqueado por ahora
+  const SHOP_W = 1000, SHOP_H = 562, SHOP_HEAD = 60, SHOP_STACK_MAX = 1000;
+  const SHOP_BG = '#070A10', SHOP_HEADER = '#0B1019', SHOP_PANEL = '#0D131D', SHOP_CARD = '#111824';
+  const SHOP_EDGE = 'rgba(120,170,220,.12)', SHOP_TEXT = '#E6EDF5', SHOP_SOFT = '#C3CEDB', SHOP_MUTED = '#8A9BB0';
+  const SHOP_ACCENT = '#3FD0FF', SHOP_URI = '#B58CFF', SHOP_CRED = '#FFB547';
+  const SHOP_HUES = ['#7FB8D8', '#9AA6B8', '#E0A04A', '#D86A5A', '#8FC9A0', '#B58CFF', '#3FD0FF', '#FFB547'];
+  const SHOP_CART = 'M6 6h15l-2 9H8z M6 6L5 3H2 M9.5 20a1.5 1.5 0 1 0 0.01 0 M18.5 20a1.5 1.5 0 1 0 0.01 0';
+  // Estrella de la maqueta, en un viewBox de 80 x 60, y su ojo
+  const SHOP_STAR = new Path2D('M40 4 L52 30 L76 40 L52 42 L46 56 L40 50 L34 56 L28 42 L4 40 L28 30 Z');
+  const SHOP_STAR_EYE = new Path2D('M40 14 L45 32 L40 38 L35 32 Z');
+  // Secciones de la maqueta, en su orden. Solo las que tienen open: true se pueden abrir
+  const SHOP_CATS = [
+    { id: 'ships', label: 'Naves', open: true, icon: 'M12 3l7 15-7-3-7 3z' },
+    { id: 'drones', label: 'Drones', icon: 'M8 8l8 8M16 8l-8 8M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6M4 4h4v4H4zM16 4h4v4h-4zM4 16h4v4H4zM16 16h4v4h-4z' },
+    { id: 'lasers', label: 'Láseres', open: true, icon: 'M3 21l9-9M12 12l7-7h2v2l-7 7M14 16l-6-6' },
+    { id: 'ammo', label: 'Munición', icon: 'M7 21V8l2-4 2 4v13zM13 21V8l2-4 2 4v13z' },
+    { id: 'gen', label: 'Generadores', open: true, icon: 'M13 2L4 14h7l-1 8 9-12h-7z' },
+    { id: 'extras', label: 'Extras', open: true, badge: true, icon: 'M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z' },
+    { id: 'pet', label: 'P.E.T. / Equipo', icon: 'M5 9l7-5 7 5v6l-7 5-7-5z' },
+    { id: 'ai', label: 'Protocolos IA', icon: 'M6 6h12v12H6zM9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3' },
+    { id: 'boost', label: 'Potenciadores', icon: 'M12 20V5M5 12l7-7 7 7' },
+    { id: 'designs', label: 'Diseños', icon: 'M4 20l4-1L19 8l-3-3L5 16zM14 7l3 3' },
+    { id: 'custom', label: 'Personalización', icon: 'M4 6h16M4 12h16M4 18h16M8 4v4M16 10v4M10 16v4' },
+  ];
+  // De dónde sale cada sección y en qué parte del inventario se guarda
+  const SHOP_SOURCE = { ships: () => SHIPS, lasers: () => LASERS, gen: () => GENERATORS, extras: () => EXTRAS };
+  const SHOP_INV = { ships: 'ships', lasers: 'lasers', gen: 'generators', extras: 'extras' };
+  const SHOP_TYPE = { ships: 'NAVE', lasers: 'LÁSER', gen: 'GENERADOR', extras: 'EXTRA' };
+
+  // Productos de una sección, sacados de los datos del juego. El precio viene de "precio" en el JSON
+  // ({ moneda: 'uridium' | 'credits', valor }); sin él, el producto se ve pero no se puede comprar
+  function shopStats(cat, d) {
+    if (cat === 'ships') return `Vida ${formatNum(d.hp || 0)} · Velocidad ${d.speed || 0} · Carga ${formatNum(d.cargo || 0)}`;
+    if (cat === 'lasers') return `Daño ${formatNum(d.damage || 0)}`;
+    if (cat === 'gen') return `Escudo ${formatNum(d.shield || 0)} · Absorción ${Math.round((d.absorb || 0) * 100)} %`;
+    return d.repair ? `Reparación de ${d.repair.seconds} s` : 'Módulo de extras';
+  }
+  function shopProducts(cat) {
+    const src = SHOP_SOURCE[cat] ? SHOP_SOURCE[cat]() : {};
+    // La nave inicial (inicial: true en el JSON) ya es del jugador desde el principio: no se vende
+    return Object.keys(src).filter(id => !src[id].inicial).map((id, i) => ({
+      id, cat, inv: SHOP_INV[cat], name: src[id].name || id, price: src[id].precio || null,
+      stack: cat !== 'ships', hue: SHOP_HUES[i % SHOP_HUES.length],
+      spr: cat === 'ships' ? SPRITES[id] || null : null, stats: shopStats(cat, src[id]),
+    }));
+  }
+  // Productos de la sección abierta que pasan el buscador
+  function shopVisible() {
+    const cat = SHOP_CATS.find(c => c.id === g.shop.cat);
+    if (!cat || !cat.open) return [];
+    const q = (g.shop.search || '').trim().toLowerCase();
+    return shopProducts(g.shop.cat).filter(p => !q || p.name.toLowerCase().includes(q));
+  }
+  const shopCurrent = list => list.find(p => p.id === g.shop.sel) || list[0] || null;
+  const shopOwned = p => (p.cat === 'ships' ? !!g.inv.ships[p.id] : g.inv[p.inv][p.id] || 0);
+  // Cantidad que se compraría: las naves son de una en una
+  const shopQty = p => (!p || p.cat === 'ships' ? 1 : Math.min(SHOP_STACK_MAX, g.shop.qty));
+  const shopUnit = m => (m === 'uridium' ? 'U.' : 'cr.');
+  // Motivo por el que no se puede comprar esa cantidad; null si se puede
+  function shopBlock(p, qty) {
+    if (!p.price) return 'Sin precio';
+    if (p.cat === 'ships' && shopOwned(p)) return 'Ya la tienes';
+    const balance = p.price.moneda === 'uridium' ? g.uridium : g.credits;
+    if (p.price.valor * qty > (balance || 0)) return 'Saldo insuficiente';
+    return null;
+  }
+  function shopPriceLabel(p) {
+    if (!p.price) return 'Sin precio';
+    if (p.cat === 'ships' && shopOwned(p)) return 'Adquirida';
+    return `${formatNum(p.price.valor)} ${shopUnit(p.price.moneda)}`;
+  }
+  function shopTagColors(p) {
+    if (!p.price) return ['#8A9BB0', '#1A2330'];
+    return p.price.moneda === 'uridium' ? ['#CDB6FF', 'rgba(181,140,255,.14)'] : ['#FFC56E', 'rgba(255,181,71,.14)'];
+  }
+
+  function shopBuy() {
+    const p = shopCurrent(shopVisible());
+    const qty = shopQty(p);
+    if (!p || shopBlock(p, qty)) return;
+    const cost = p.price.valor * qty;
+    if (p.price.moneda === 'uridium') g.uridium -= cost; else g.credits -= cost;
+    if (p.cat === 'ships') g.inv.ships[p.id] = 1;
+    else g.inv[p.inv][p.id] = (g.inv[p.inv][p.id] || 0) + qty;
+    g.shop.confirm = false;
+    showBanner(`${qty > 1 ? formatNum(qty) + ' × ' : ''}${p.name} comprado`);
+  }
+
+  // Geometría de la ventana: la misma para dibujar y para los clics
+  function shopIconGeom() { return winIconGeom('shop'); }
+
+  function shopGeom() {
+    if (!g.shopOpen) return shopIconGeom();
+    const pos = g.shopPos || { x: Math.max(0, (W - SHOP_W) / 2), y: 40 };
+    const x = clamp(pos.x, 0, Math.max(0, W - SHOP_W)), y = clamp(pos.y, 0, Math.max(0, H - SHOP_H));
+    return { x, y, w: SHOP_W, h: SHOP_H, close: { x: x + SHOP_W - 44, y: y + 16, w: 28, h: 28 } };
+  }
+
+  function shopRects(b) {
+    const R = (x, y, w, h) => ({ x: b.x + x, y: b.y + y, w, h });
+    const top = SHOP_HEAD + 16, pad = 16, gap = 12, navW = 164, listW = 250, buyW = 211, previewH = 232;
+    const listX = pad + navW + gap, midX = listX + listW + gap, midW = SHOP_W - midX - gap - buyW - pad;
+    const gridY = top + 84, gridH = SHOP_H - pad - gridY, cardW = (listW - 10) / 2, cardH = 142;
+    const visible = shopVisible();
+    const cards = visible.map((p, i) => ({
+      p, r: R(listX + (i % 2) * (cardW + 10), gridY + Math.floor(i / 2) * (cardH + 10) - g.shop.scroll, cardW, cardH),
+    }));
+    const scrollMax = Math.max(0, Math.ceil(visible.length / 2) * (cardH + 10) - 10 - gridH);
+    // Panel de compra: sus textos van en posiciones relativas a top
+    const bx = SHOP_W - pad - buyW + 20, bw = buyW - 40;
+    const dlg = { x: SHOP_W / 2 - 170, y: SHOP_H / 2 - 80, w: 340, h: 160 };
+    return {
+      close: b.close,
+      cats: SHOP_CATS.map((c, i) => ({ id: c.id, r: R(pad, top + 30 + i * 40, navW, 36) })),
+      search: R(listX, top + 34, listW, 34),
+      grid: R(listX, gridY, listW, gridH),
+      cards, scrollMax,
+      preview: R(midX, top, midW, previewH),
+      play: R(midX + 14, top + previewH - 58, 44, 44),
+      desc: R(midX, top + previewH + gap, midW, SHOP_H - pad - (top + previewH + gap)),
+      buyPanel: R(SHOP_W - pad - buyW, top, buyW, SHOP_H - top - pad),
+      minus: R(bx, top + 136, 40, 40),
+      plus: R(bx + bw - 40, top + 136, 40, 40),
+      presets: [10, 100, 1000].map((n, k) => ({ n, r: R(bx + k * 59, top + 186, 53, 30) })),
+      buy: R(bx, SHOP_H - pad - 20 - 52, bw, 52),
+      confirm: {
+        box: R(dlg.x, dlg.y, dlg.w, dlg.h),
+        yes: R(dlg.x + 30, dlg.y + 104, 130, 36),
+        no: R(dlg.x + 180, dlg.y + 104, 130, 36),
+      },
+    };
+  }
+
+  // Trazos o relleno de un icono de la maqueta (viewBox 24 x 24), centrado en (cx, cy)
+  function shopIcon(paths, cx, cy, size, color, width = 1.8, fill = false) {
+    ctx.save();
+    ctx.translate(cx - size / 2, cy - size / 2);
+    ctx.scale(size / 24, size / 24);
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (const d of paths) {
+      const p = new Path2D(d);
+      if (fill) ctx.fill(p); else ctx.stroke(p);
+    }
+    ctx.restore();
+  }
+
+  function shopRoundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function shopBox(x, y, w, h, r, fill, edge) {
+    shopRoundRect(x, y, w, h, r);
+    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+    if (edge) { ctx.strokeStyle = edge; ctx.lineWidth = 1; ctx.stroke(); }
+  }
+
+  // Recorta un texto con puntos suspensivos hasta que quepa en maxW (la fuente ya está puesta)
+  function shopFit(text, maxW) {
+    if (ctx.measureText(text).width <= maxW) return text;
+    let t = text;
+    while (t.length > 1 && ctx.measureText(t + '…').width > maxW) t = t.slice(0, -1);
+    return t + '…';
+  }
+
+  // Emblema de la maqueta: estrella de color con el ojo oscuro. sx aplasta el emblema en la vista previa al girar
+  function drawShopEmblem(cx, cy, hue, s, sx = 1) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(s * Math.max(0.04, Math.abs(sx)), s);
+    ctx.translate(-40, -30);
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = hue;
+    ctx.fill(SHOP_STAR);
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = SHOP_BG;
+    ctx.fill(SHOP_STAR_EYE);
+    ctx.restore();
+  }
+
+  // Icono de la barra superior, igual que los de las demás ventanas
+  function drawShopIcon(b) {
+    const hover = inBox(b, mouse.x, mouse.y);
+    const bg = ctx.createLinearGradient(0, b.y, 0, b.y + b.h);
+    bg.addColorStop(0, '#1b2a44');
+    bg.addColorStop(1, '#070d18');
+    ctx.fillStyle = bg;
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeStyle = hover ? '#fff0b3' : SHOP_ACCENT;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(b.x + 1, b.y + 1, b.w - 2, b.h - 2);
+    shopIcon([SHOP_CART], b.x + b.w / 2, b.y + b.h / 2, 22, SHOP_ACCENT);
+    if (hover) drawIconTooltip(b, 'Tienda');
+  }
+
+  function drawShopCard(p, r, on) {
+    const hover = inBox(r, mouse.x, mouse.y);
+    ctx.save();
+    shopBox(r.x, r.y, r.w, r.h, 12, on ? 'rgba(63,208,255,.07)' : SHOP_CARD, on ? SHOP_ACCENT : hover ? 'rgba(63,208,255,.55)' : SHOP_EDGE);
+    ctx.save();
+    shopRoundRect(r.x, r.y, r.w, r.h, 12);
+    ctx.clip();
+    ctx.fillStyle = '#0A0F17';
+    ctx.fillRect(r.x, r.y, r.w, 84);
+    drawShopEmblem(r.x + r.w / 2, r.y + 42, p.hue, 0.9);
+    ctx.restore();
+    if (on) {
+      ctx.beginPath();
+      ctx.arc(r.x + r.w - 14, r.y + 14, 9, 0, Math.PI * 2);
+      ctx.fillStyle = SHOP_ACCENT;
+      ctx.fill();
+      shopIcon(['M5 12l5 5 9-10'], r.x + r.w - 14, r.y + 14, 12, '#06202B', 3);
+    }
+    ctx.font = "600 13px 'Chakra Petch', sans-serif";
+    ctx.fillStyle = SHOP_TEXT;
+    ctx.fillText(shopFit(p.name, r.w - 20), r.x + 10, r.y + 108);
+    const [tc, tb] = shopTagColors(p);
+    const label = shopPriceLabel(p);
+    ctx.font = '600 11px Inter, sans-serif';
+    shopBox(r.x + 10, r.y + 116, ctx.measureText(label).width + 14, 20, 6, tb);
+    ctx.fillStyle = tc;
+    ctx.fillText(label, r.x + 17, r.y + 130);
+    ctx.restore();
+  }
+
+  function drawShopPreview(b, p, spin) {
+    const cx = b.x + b.w / 2, cy = b.y + b.h * 0.5;
+    const glow = ctx.createRadialGradient(cx, cy, 10, cx, cy, b.w * 0.6);
+    glow.addColorStop(0, '#12253A');
+    glow.addColorStop(1, '#0A111B');
+    shopBox(b.x, b.y, b.w, b.h, 16, glow, SHOP_EDGE);
+    ctx.save();
+    shopRoundRect(b.x, b.y, b.w, b.h, 16);
+    ctx.clip();
+    if (p) {
+      if (p.spr) {
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.scale(1.3, 1.3);
+        drawShipSprite(0, 0, spin, p.spr);
+        ctx.restore();
+      } else {
+        drawShopEmblem(cx, cy, p.hue, 2.4, Math.cos(spin));
+      }
+    }
+    ctx.restore();
+    // Etiquetas: tipo, moneda o apilable, y 360°
+    const tags = p ? [SHOP_TYPE[p.cat], p.price ? (p.price.moneda === 'uridium' ? 'URIDIUM' : 'CRÉDITOS') : 'SIN PRECIO', ...(p.stack ? ['APILABLE'] : [])] : [];
+    let tx = b.x + 14;
+    ctx.font = "700 11px Inter, sans-serif";
+    tags.forEach((t, i) => {
+      const w = ctx.measureText(t).width + 20;
+      shopBox(tx, b.y + 14, w, 24, 8, i ? 'rgba(255,181,71,.15)' : 'rgba(7,10,16,.7)', 'rgba(120,170,220,.2)');
+      ctx.fillStyle = i ? '#FFC56E' : SHOP_TEXT;
+      ctx.fillText(t, tx + 10, b.y + 30);
+      tx += w + 8;
+    });
+    ctx.font = "600 12px 'Chakra Petch', sans-serif";
+    ctx.fillStyle = '#8BE4FF';
+    ctx.textAlign = 'right';
+    ctx.fillText('360°', b.x + b.w - 14, b.y + 30);
+    ctx.textAlign = 'left';
+    // Control de reproducción y barra de giro
+    const play = { x: b.x + 14, y: b.y + b.h - 58, w: 44, h: 44 };
+    shopBox(play.x, play.y, play.w, play.h, 12, 'rgba(7,10,16,.7)', 'rgba(120,170,220,.2)');
+    shopIcon(g.shop.playing ? ['M6 5h4v14H6z', 'M14 5h4v14h-4z'] : ['M7 5l12 7-12 7z'], play.x + 22, play.y + 22, 16, SHOP_TEXT, 0, true);
+    const frac = spin / (Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,.1)';
+    ctx.fillRect(play.x + 56, play.y + 20, b.w - 230, 4);
+    ctx.fillStyle = SHOP_ACCENT;
+    ctx.fillRect(play.x + 56, play.y + 20, (b.w - 230) * frac, 4);
+    ctx.font = '11px Inter, sans-serif';
+    ctx.fillStyle = SHOP_MUTED;
+    ctx.textAlign = 'right';
+    ctx.fillText('Vista previa en vídeo', b.x + b.w - 14, play.y + 24);
+    ctx.textAlign = 'left';
+  }
+
+  function drawShopDesc(b, p, catLabel) {
+    shopBox(b.x, b.y, b.w, b.h, 16, SHOP_PANEL, SHOP_EDGE);
+    if (!p) {
+      ctx.font = '14px Inter, sans-serif';
+      ctx.fillStyle = SHOP_MUTED;
+      ctx.fillText('Selecciona un producto', b.x + 20, b.y + 40);
+      return;
+    }
+    ctx.font = "700 22px 'Chakra Petch', sans-serif";
+    ctx.fillStyle = SHOP_TEXT;
+    ctx.fillText(shopFit(p.name, b.w - 40), b.x + 20, b.y + 38);
+    ctx.font = '13px Inter, sans-serif';
+    ctx.fillStyle = SHOP_MUTED;
+    ctx.fillText(catLabel, b.x + 20, b.y + 60);
+    ctx.font = '14px Inter, sans-serif';
+    ctx.fillStyle = SHOP_SOFT;
+    wrapText(p.stats, b.w - 40).forEach((line, i) => ctx.fillText(line, b.x + 20, b.y + 94 + i * 22));
+  }
+
+  function drawShopBuy(R, p, qty, block) {
+    const bp = R.buyPanel;
+    shopBox(bp.x, bp.y, bp.w, bp.h, 16, SHOP_PANEL, SHOP_EDGE);
+    const ix = bp.x + 20, iw = bp.w - 40, y0 = bp.y;
+    ctx.textAlign = 'left';
+    ctx.font = '600 11px Inter, sans-serif';
+    ctx.fillStyle = SHOP_MUTED;
+    ctx.fillText('REFERENCIA', ix, y0 + 12);
+    if (!p) return;
+    ctx.font = "700 20px 'Chakra Petch', sans-serif";
+    ctx.fillStyle = SHOP_TEXT;
+    ctx.fillText(shopFit(p.name, iw), ix, y0 + 40);
+    ctx.fillStyle = SHOP_EDGE;
+    ctx.fillRect(ix, y0 + 58, iw, 1);
+    ctx.fillRect(ix, y0 + 100, iw, 1);
+    ctx.font = '13px Inter, sans-serif';
+    ctx.fillStyle = SHOP_MUTED;
+    ctx.fillText('Precio unidad', ix, y0 + 84);
+    ctx.font = "600 15px 'Chakra Petch', sans-serif";
+    ctx.fillStyle = SHOP_TEXT;
+    ctx.textAlign = 'right';
+    ctx.fillText(p.price ? `${formatNum(p.price.valor)} ${shopUnit(p.price.moneda)}` : '—', ix + iw, y0 + 84);
+    ctx.textAlign = 'left';
+    ctx.font = '600 11px Inter, sans-serif';
+    ctx.fillStyle = SHOP_MUTED;
+    ctx.fillText('CANTIDAD', ix, y0 + 124);
+    // Cantidad: − y + a los lados
+    for (const [r, label] of [[R.minus, '−'], [R.plus, '+']]) {
+      const hover = inBox(r, mouse.x, mouse.y);
+      shopBox(r.x, r.y, r.w, r.h, 10, hover ? 'rgba(63,208,255,.14)' : '#121A27', SHOP_EDGE);
+      ctx.font = '20px Inter, sans-serif';
+      ctx.fillStyle = SHOP_TEXT;
+      ctx.textAlign = 'center';
+      ctx.fillText(label, r.x + r.w / 2, r.y + 27);
+    }
+    const qb = { x: R.minus.x + 46, y: R.minus.y, w: iw - 92, h: 40 };
+    shopBox(qb.x, qb.y, qb.w, qb.h, 10, SHOP_BG, SHOP_EDGE);
+    ctx.font = "600 18px 'Chakra Petch', sans-serif";
+    ctx.fillStyle = SHOP_TEXT;
+    ctx.textAlign = 'center';
+    ctx.fillText(String(qty), qb.x + qb.w / 2, qb.y + 27);
+    ctx.textAlign = 'left';
+    // Atajos de cantidad: solo en los productos apilables
+    if (p.stack) {
+      R.presets.forEach(pr => {
+        const hover = inBox(pr.r, mouse.x, mouse.y);
+        shopBox(pr.r.x, pr.r.y, pr.r.w, pr.r.h, 8, hover ? 'rgba(63,208,255,.14)' : null, SHOP_EDGE);
+        ctx.font = '600 12px Inter, sans-serif';
+        ctx.fillStyle = '#C3CEDB';
+        ctx.textAlign = 'center';
+        ctx.fillText('×' + formatNum(pr.n), pr.r.x + pr.r.w / 2, pr.r.y + 20);
+      });
+      ctx.textAlign = 'left';
+    }
+    ctx.font = '12px Inter, sans-serif';
+    ctx.fillStyle = SHOP_MUTED;
+    const owned = shopOwned(p);
+    const limit = p.cat === 'ships' ? 'Máximo 1 unidad por cuenta' : `Máximo ${formatNum(SHOP_STACK_MAX)} unidades por compra`;
+    ctx.fillText(limit, ix, y0 + 232);
+    if (owned) ctx.fillText(p.cat === 'ships' ? 'Ya la tienes' : `Tienes ${formatNum(owned)}`, ix, y0 + 250);
+    ctx.font = '600 11px Inter, sans-serif';
+    ctx.fillText('TOTAL', ix, y0 + 276);
+    ctx.font = "700 26px 'Chakra Petch', sans-serif";
+    ctx.fillStyle = SHOP_ACCENT;
+    ctx.fillText(p.price ? `${formatNum(p.price.valor * qty)} ${shopUnit(p.price.moneda)}` : '—', ix, y0 + 304);
+    // Botón de compra: con el motivo escrito si no se puede
+    const hover = !block && inBox(R.buy, mouse.x, mouse.y);
+    shopBox(R.buy.x, R.buy.y, R.buy.w, R.buy.h, 12, block ? '#1B2636' : hover ? '#7fe4ff' : SHOP_ACCENT);
+    ctx.font = "700 16px 'Chakra Petch', sans-serif";
+    ctx.fillStyle = block ? SHOP_MUTED : '#04161E';
+    ctx.textAlign = 'center';
+    ctx.fillText(block || 'COMPRAR', R.buy.x + R.buy.w / 2, R.buy.y + 32);
+    ctx.font = '11px Inter, sans-serif';
+    ctx.fillStyle = SHOP_MUTED;
+    ctx.fillText('Se te pedirá confirmación antes de comprar', R.buy.x + R.buy.w / 2, R.buy.y + R.buy.h + 18);
+    ctx.textAlign = 'left';
+  }
+
+  function drawShopConfirm(b, R, p, qty) {
+    ctx.fillStyle = 'rgba(7,10,16,.72)';
+    ctx.fillRect(b.x, b.y, SHOP_W, SHOP_H);
+    shopBox(R.confirm.box.x, R.confirm.box.y, R.confirm.box.w, R.confirm.box.h, 16, SHOP_PANEL, SHOP_ACCENT);
+    const bx = R.confirm.box.x + 24, by = R.confirm.box.y;
+    ctx.textAlign = 'left';
+    ctx.font = "700 18px 'Chakra Petch', sans-serif";
+    ctx.fillStyle = SHOP_TEXT;
+    ctx.fillText('Confirmar compra', bx, by + 40);
+    ctx.font = '14px Inter, sans-serif';
+    ctx.fillStyle = SHOP_SOFT;
+    ctx.fillText(`${formatNum(qty)} × ${p.name}`, bx, by + 72);
+    ctx.fillText(`Total: ${formatNum(p.price.valor * qty)} ${shopUnit(p.price.moneda)}`, bx, by + 94);
+    const yes = R.confirm.yes, no = R.confirm.no;
+    shopBox(yes.x, yes.y, yes.w, yes.h, 10, SHOP_ACCENT);
+    shopBox(no.x, no.y, no.w, no.h, 10, null, SHOP_EDGE);
+    ctx.font = "700 14px 'Chakra Petch', sans-serif";
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#04161E';
+    ctx.fillText('Confirmar', yes.x + yes.w / 2, yes.y + 23);
+    ctx.fillStyle = SHOP_TEXT;
+    ctx.fillText('Cancelar', no.x + no.w / 2, no.y + 23);
+    ctx.textAlign = 'left';
+  }
+
+  function drawShopWindow() {
+    if (!g.shopOpen) return;
+    const b = shopGeom(), R = shopRects(b);
+    const cat = SHOP_CATS.find(c => c.id === g.shop.cat) || SHOP_CATS[0];
+    const list = shopVisible(), cur = shopCurrent(list);
+    const now = performance.now();
+    const dt = Math.min(0.1, (now - (g.shop.last || now)) / 1000);
+    g.shop.last = now;
+    // Giro de la vista previa: una vuelta cada 9 s, parado con el botón de pausa
+    if (g.shop.playing) g.shop.spin = (g.shop.spin + dt * Math.PI * 2 / 9) % (Math.PI * 2);
+    ctx.save();
+    ctx.textBaseline = 'alphabetic';
+    // Fondo y cabecera, recortados al marco redondeado
+    ctx.save();
+    shopRoundRect(b.x, b.y, SHOP_W, SHOP_H, 16);
+    ctx.clip();
+    ctx.fillStyle = SHOP_BG;
+    ctx.fillRect(b.x, b.y, SHOP_W, SHOP_H);
+    ctx.fillStyle = SHOP_HEADER;
+    ctx.fillRect(b.x, b.y, SHOP_W, SHOP_HEAD);
+    ctx.fillStyle = SHOP_EDGE;
+    ctx.fillRect(b.x, b.y + SHOP_HEAD - 1, SHOP_W, 1);
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(63,208,255,.25)';
+    ctx.lineWidth = 1;
+    shopRoundRect(b.x + 0.5, b.y + 0.5, SHOP_W - 1, SHOP_H - 1, 16);
+    ctx.stroke();
+
+    // Cabecera: icono, título, sección y saldos
+    shopBox(b.x + 16, b.y + 14, 32, 32, 8, 'rgba(63,208,255,.12)');
+    shopIcon([SHOP_CART], b.x + 32, b.y + 30, 18, SHOP_ACCENT);
+    ctx.font = "700 20px 'Chakra Petch', sans-serif";
+    ctx.fillStyle = SHOP_TEXT;
+    ctx.fillText('TIENDA', b.x + 58, b.y + 36);
+    const tw = ctx.measureText('TIENDA').width;
+    ctx.font = '13px Inter, sans-serif';
+    ctx.fillStyle = SHOP_MUTED;
+    ctx.fillText('/ ' + cat.label, b.x + 58 + tw + 10, b.y + 36);
+    const pillsX = b.x + SHOP_W - 44 - 12 - 190;
+    drawShopPill(pillsX - 200, b.y + 16, SHOP_URI, 'Uridium', g.uridium || 0);
+    drawShopPill(pillsX, b.y + 16, SHOP_CRED, 'Créditos', g.credits || 0);
+    shopBox(b.x + SHOP_W - 44, b.y + 16, 28, 28, 8, null, SHOP_EDGE);
+    shopIcon(['M6 6l12 12M18 6L6 18'], b.x + SHOP_W - 30, b.y + 30, 14, SHOP_TEXT, 2);
+
+    // Secciones
+    ctx.font = '600 11px Inter, sans-serif';
+    ctx.fillStyle = SHOP_MUTED;
+    ctx.fillText('SECCIONES', R.cats[0].r.x + 8, R.cats[0].r.y - 14);
+    for (const row of R.cats) {
+      const c = SHOP_CATS.find(k => k.id === row.id), on = c.id === g.shop.cat;
+      const hover = c.open && inBox(row.r, mouse.x, mouse.y);
+      ctx.save();
+      if (!c.open) ctx.globalAlpha = 0.35;
+      shopBox(row.r.x, row.r.y, row.r.w, row.r.h, 10, on ? 'rgba(63,208,255,.14)' : hover ? 'rgba(63,208,255,.08)' : null);
+      shopIcon([c.icon], row.r.x + 22, row.r.y + row.r.h / 2, 18, on ? SHOP_ACCENT : SHOP_MUTED);
+      ctx.font = '500 14px Inter, sans-serif';
+      ctx.fillStyle = on ? SHOP_TEXT : '#9FB0C4';
+      ctx.fillText(c.label, row.r.x + 42, row.r.y + 23);
+      if (c.badge) {
+        shopBox(row.r.x + row.r.w - 60, row.r.y + 9, 50, 18, 5, SHOP_CRED);
+        ctx.font = '700 10px Inter, sans-serif';
+        ctx.fillStyle = '#1A1206';
+        ctx.textAlign = 'center';
+        ctx.fillText('NUEVO', row.r.x + row.r.w - 35, row.r.y + 22);
+        ctx.textAlign = 'left';
+      }
+      ctx.restore();
+    }
+
+    // Lista: título, buscador y productos (recortados a su zona)
+    ctx.font = "700 18px 'Chakra Petch', sans-serif";
+    ctx.fillStyle = SHOP_TEXT;
+    ctx.fillText(cat.label, R.grid.x, R.search.y - 16);
+    ctx.font = '12px Inter, sans-serif';
+    ctx.fillStyle = SHOP_MUTED;
+    ctx.textAlign = 'right';
+    ctx.fillText(list.length === 1 ? '1 producto' : `${list.length} productos`, R.grid.x + R.grid.w, R.search.y - 16);
+    ctx.textAlign = 'left';
+    shopBox(R.search.x, R.search.y, R.search.w, R.search.h, 10, SHOP_BG, SHOP_EDGE);
+    shopIcon(['M18 11a7 7 0 1 0-14 0a7 7 0 1 0 14 0', 'M20 20l-3.5-3.5'], R.search.x + 20, R.search.y + 17, 15, SHOP_MUTED, 2);
+    ctx.font = '13px Inter, sans-serif';
+    if (g.shop.search === null) {
+      ctx.fillStyle = SHOP_MUTED;
+      ctx.fillText('Buscar producto…', R.search.x + 36, R.search.y + 22);
+    } else {
+      ctx.fillStyle = SHOP_TEXT;
+      ctx.fillText(g.shop.search, R.search.x + 36, R.search.y + 22);
+      if (Math.floor(now / 500) % 2 === 0) {
+        const cx = R.search.x + 36 + ctx.measureText(g.shop.search).width + 2;
+        ctx.fillRect(cx, R.search.y + 9, 1, 16);
+      }
+    }
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(R.grid.x, R.grid.y, R.grid.w, R.grid.h);
+    ctx.clip();
+    if (!cat.open) {
+      drawShopMessage(R.grid, 'Sección no disponible todavía');
+    } else if (!list.length) {
+      drawShopMessage(R.grid, g.shop.search ? 'Ningún producto coincide' : 'No hay productos en esta sección');
+    }
+    for (const card of R.cards) drawShopCard(card.p, card.r, cur && card.p.id === cur.id);
+    ctx.restore();
+
+    // Vista previa, descripción y compra
+    drawShopPreview(R.preview, cur, g.shop.spin || 0);
+    drawShopDesc(R.desc, cur, cur ? SHOP_TYPE[cur.cat] + ' · ' + cat.label : cat.label);
+    const qty = shopQty(cur);
+    const block = cur ? shopBlock(cur, qty) : 'Sin producto';
+    drawShopBuy(R, cur, qty, block);
+    if (g.shop.confirm && cur) drawShopConfirm(b, R, cur, qty);
+    ctx.restore();
+  }
+
+  function drawShopPill(x, y, color, label, value) {
+    shopBox(x, y, 190, 28, 14, '#121A27', SHOP_EDGE);
+    ctx.beginPath();
+    ctx.arc(x + 14, y + 14, 4, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.font = '12px Inter, sans-serif';
+    ctx.fillStyle = SHOP_MUTED;
+    ctx.fillText(label, x + 26, y + 18);
+    ctx.font = "600 14px 'Chakra Petch', sans-serif";
+    ctx.fillStyle = SHOP_TEXT;
+    ctx.textAlign = 'right';
+    ctx.fillText(formatNum(value), x + 178, y + 19);
+    ctx.textAlign = 'left';
+  }
+
+  function drawShopMessage(r, text) {
+    ctx.font = '13px Inter, sans-serif';
+    ctx.fillStyle = SHOP_MUTED;
+    ctx.textAlign = 'center';
+    ctx.fillText(text, r.x + r.w / 2, r.y + r.h / 2);
+    ctx.textAlign = 'left';
+  }
+
+  // Clics dentro de la ventana de la tienda
+  function shopClick(b, x, y) {
+    const R = shopRects(b), hit = r => inBox(r, x, y);
+    if (hit(b.close)) { g.shopOpen = false; g.shop.confirm = false; return; }
+    if (g.shop.confirm) {
+      if (hit(R.confirm.yes)) shopBuy();
+      else if (hit(R.confirm.no)) g.shop.confirm = false;
+      return;
+    }
+    // La barra superior arrastra la ventana
+    if (y < b.y + SHOP_HEAD) { g.drag = { key: 'shopPos', dx: x - b.x, dy: y - b.y }; return; }
+    if (!hit(R.search) && g.shop.search !== null) g.shop.search = null;
+    const row = R.cats.find(k => hit(k.r));
+    if (row) {
+      const c = SHOP_CATS.find(k => k.id === row.id);
+      if (c.open && g.shop.cat !== c.id) {
+        g.shop.cat = c.id; g.shop.sel = null; g.shop.qty = 1; g.shop.scroll = 0; g.shop.search = null;
+      }
+      return;
+    }
+    if (hit(R.search)) { if (g.shop.search === null) g.shop.search = ''; return; }
+    if (hit(R.play)) { g.shop.playing = !g.shop.playing; return; }
+    const card = R.cards.find(k => hit(k.r) && inBox(R.grid, x, y));
+    if (card) { g.shop.sel = card.p.id; g.shop.qty = 1; return; }
+    const cur = shopCurrent(shopVisible());
+    if (!cur) return;
+    const stack = cur.stack;
+    if (hit(R.minus)) g.shop.qty = Math.max(1, g.shop.qty - 1);
+    else if (hit(R.plus) && stack) g.shop.qty = Math.min(SHOP_STACK_MAX, g.shop.qty + 1);
+    const pr = R.presets.find(k => hit(k.r));
+    if (pr && stack) g.shop.qty = Math.min(SHOP_STACK_MAX, pr.n);
+    if (hit(R.buy) && !shopBlock(cur, shopQty(cur))) g.shop.confirm = true;
+  }
+
+  // Rueda: desplaza la lista de productos
+  canvas.addEventListener('wheel', e => {
+    if (!g.shopOpen) return;
+    const R = shopRects(shopGeom());
+    if (!inBox(R.grid, e.clientX, e.clientY)) return;
+    e.preventDefault();
+    g.shop.scroll = clamp(g.shop.scroll + Math.sign(e.deltaY) * 40, 0, R.scrollMax);
+  }, { passive: false });
+
   // ---------- Hangar ----------
   // Icono del hangar, arriba a la derecha junto a los de nave, usuario y misiones
   function hangarIconGeom() { return winIconGeom('hangar'); }
@@ -4586,8 +5179,10 @@
     drawPlayerWindow();
     drawNaveWindow();
     drawRefineWindow();
+    drawShopWindow();
     if (g.hangar.open) drawHangar();
     drawBoostConfirm();
+    drawWinIcon(drawShopIcon, shopIconGeom(), g.shopOpen);
     if (inBase()) drawWinIcon(drawHangarIcon, hangarIconGeom(), g.hangar.open);
     drawActionBar();
     drawSafeMsg();
@@ -4635,7 +5230,7 @@
     // Iconos de ventana, arriba a la izquierda: un clic abre o cierra su ventana, también con la ventana abierta
     const winIcon = [
       ['missionOpen', missionIconGeom()], ['mapOpen', minimapIconGeom()], ['playerOpen', playerIconGeom()],
-      ['naveOpen', naveIconGeom()], ['refineOpen', refineIconGeom()],
+      ['naveOpen', naveIconGeom()], ['refineOpen', refineIconGeom()], ['shopOpen', shopIconGeom()],
     ].find(([, b]) => inBox(b, e.clientX, e.clientY));
     if (winIcon) { g[winIcon[0]] = !g[winIcon[0]]; return; }
     // Ventana de misiones: el cuadrado la abre; el botón X la minimiza. Un clic dentro no mueve la nave
@@ -4697,6 +5292,8 @@
       }
       return;
     }
+    // Tienda: dentro, la ventana responde a sus controles; un clic dentro no mueve la nave
+    if (g.shopOpen && inBox(shopGeom(), e.clientX, e.clientY)) { shopClick(shopGeom(), e.clientX, e.clientY); return; }
     // Ventana de venta: la X la cierra y cada "Vender" vende esa materia; un clic dentro no mueve la nave
     if (g.stationOpen) {
       const sb = stationGeom();
@@ -4890,6 +5487,14 @@
   }
 
   addEventListener('keydown', e => {
+    // Tienda: con el buscador activo, las teclas escriben en él y no llegan a los atajos del juego
+    if (g.shopOpen && g.shop.search !== null) {
+      if (e.code === 'Escape' || e.code === 'Enter') { g.shop.search = null; return; }
+      if (e.code === 'Backspace') { g.shop.search = g.shop.search.slice(0, -1); g.shop.scroll = 0; return; }
+      if (e.key.length === 1 && g.shop.search.length < 24) { g.shop.search += e.key; g.shop.scroll = 0; }
+      return;
+    }
+    if (g.shopOpen && e.code === 'Escape') { g.shopOpen = false; g.shop.confirm = false; return; }
     // Esc cierra el hangar; mientras está abierto el juego sigue y las teclas de combate responden
     if (g.hangar.open && e.code === 'Escape') { g.hangar.open = false; return; }
     if (e.code === 'ControlLeft' || e.code === 'ControlRight') {
@@ -4920,7 +5525,7 @@
       damage: p.damage, speed: p.speed, ammo: p.ammo, missile: p.missile,
       up: g.up, credits: g.credits, uridium: g.uridium, exp: g.exp, honor: g.honor,
       cargo: g.cargo, refine: g.refine, missions: g.missions, taken: g.taken, completed: g.completed, missionPos: g.missionPos,
-      mapOpen: g.mapOpen, mapPos: g.mapPos, playerId: g.playerId, playerPos: g.playerPos, navePos: g.navePos, refinePos: g.refinePos, teleportBonus: g.teleportBonus, lootKeys: g.lootKeys,
+      mapOpen: g.mapOpen, mapPos: g.mapPos, playerId: g.playerId, playerPos: g.playerPos, navePos: g.navePos, refinePos: g.refinePos, shopPos: g.shopPos, teleportBonus: g.teleportBonus, lootKeys: g.lootKeys,
       shipId: g.shipId, equip: g.equip, generators: g.generators, missiles: g.missiles, extras: g.extras, inv: g.inv, boost: g.boost,
       bots: g.allies.map(b => ({ name: b.name, zi: b.zi, x: b.x, y: b.y, exp: b.exp, honor: b.honor })),
       world: { ...g.world, [g.zone.id]: saveAliens(g.aliens) },
@@ -4970,6 +5575,7 @@
     if (d.mapPos) g.mapPos = d.mapPos;
     if (d.navePos) g.navePos = d.navePos;
     if (d.refinePos) g.refinePos = d.refinePos;
+    if (d.shopPos) g.shopPos = d.shopPos;
     g.teleportBonus = d.teleportBonus || 0;
     g.lootKeys = d.lootKeys || 0;
     // Partidas anteriores a la barra editable no tienen "bar": se queda la barra por defecto
