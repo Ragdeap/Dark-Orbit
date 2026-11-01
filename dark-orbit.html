@@ -256,9 +256,9 @@
     // pem: al bajar a esa fracción de vida hay una tirada (chance) en la que lanzan un PEM que quita el objetivo fijado por la nave.
     streuner: { name: 'Streuner', sprite: 'streuner', weight: 3, sides: 4, r: 16, hp: 800,  shield: 400,  speed: 280, dmg: 20, range: 260, aggro: 350, cool: 1.6, shots: 1, rewards: { exp: 400, honor: 2, credits: 400, uridium: 1, cargo: { prometium: 10, endurium: 10 } }, maps: STREUNER_MAPS, color: '#e0553f', passive: true },
     // Variantes del Streuner (alcance, cadencia y recompensa provisionales)
-    recruit:  { name: 'Recruit Streuner', sides: 4, r: 18, hp: 600,  shield: 800,  speed: 270, dmg: 40, range: 280, aggro: 380, cool: 1.4, shots: 1, rewards: { exp: 500, honor: 3, credits: 600, uridium: 2, cargo: { prometium: 12, endurium: 12 } }, maps: STREUNER_MAPS, color: '#e07a3f', flee: 0.2 },
+    recruit:  { name: 'Recruit Streuner', sprite: 'recruit-streuner', sides: 4, r: 18, hp: 600,  shield: 800,  speed: 270, dmg: 40, range: 280, aggro: 380, cool: 1.4, shots: 1, rewards: { exp: 500, honor: 3, credits: 600, uridium: 2, cargo: { prometium: 12, endurium: 12 } }, maps: STREUNER_MAPS, color: '#e07a3f', flee: 0.2 },
     // Sin velocidad propia: iguala la de la nave a la que asiste (ver escortOf)
-    aider:    { name: 'Aider Streuner',   sides: 5, r: 15, hp: 1500, shield: 1000, speed: null, escort: true, dmg: 70, range: 320, aggro: 300, cool: 2.0, shots: 1, rewards: { exp: 700, honor: 4, credits: 700, uridium: 2, cargo: { prometium: 15, endurium: 15 } }, maps: STREUNER_MAPS, color: '#6fd3a0', passive: true },
+    aider:    { name: 'Aider Streuner',   sprite: 'aider-streuner', sides: 5, r: 15, hp: 1500, shield: 1000, speed: null, escort: true, dmg: 70, range: 320, aggro: 300, cool: 2.0, shots: 1, rewards: { exp: 700, honor: 4, credits: 700, uridium: 2, cargo: { prometium: 15, endurium: 15 } }, maps: STREUNER_MAPS, color: '#6fd3a0', passive: true },
     // Solo en los mapas X-2. Alcance, detección, cadencia y tipo son provisionales
     bossStreuner: { name: 'Boss Streuner', sides: 4, r: 26, hp: 3200, shield: 1600, speed: 250, dmg: 100, range: 300, aggro: 350, cool: 1.6, shots: 2, rewards: { exp: 1600, honor: 8, credits: 1600, uridium: 4, cargo: { prometium: 40, terbium: 10, endurium: 40 } }, maps: ['1-2', '2-2', '3-2'], color: '#ff6b35', passive: true },
     // Hostil: ataca en cuanto la nave entra en su detección
@@ -1881,7 +1881,8 @@
       // Un proyectil del jugador también puede dar al bot que tiene fijado; los de un bot solo dan a NPC
       const foes = b.bot ? g.aliens : [...g.aliens, ...g.allies.filter(x => x === b.target)];
       for (const a of foes) {
-        if (a.hp > 0 && segDist(a.x, a.y, px, py, b.x, b.y) < (a.isBot ? BOT_RADIUS : ALIEN[a.type].r)) {
+        const sp = (a.isBot ? SPRITES[BOT_SHIP] : NPC_SPRITES[a.type]) || null;
+        if (a.hp > 0 && shipHit(a, sp, a.isBot ? BOT_RADIUS : ALIEN[a.type].r, px, py, b.x, b.y)) {
           if (a.isBot) { a.hostile = true; hurtBot(a, b.dmg); }
           else hitAlien(a, b.dmg, b.bot || g.p);
           if (b.missile) {
@@ -1904,7 +1905,9 @@
       // Un disparo fallado sigue de largo; el resto impacta en la primera nave que toca (la del jugador o un bot)
       if (s.miss || s.life <= 0) continue;
       // El misil ralentizador sólo afecta a la nave: atraviesa a los bots
-      const hit = [g.p, ...(s.slow ? [] : g.allies)].find(v => v !== s.from && targetable(v) && dist(s.x, s.y, v.x, v.y) < 14);
+      const x0 = s.x - s.vx * dt, y0 = s.y - s.vy * dt;
+      const hit = [g.p, ...(s.slow ? [] : g.allies)].find(v => v !== s.from && targetable(v) &&
+        shipHit(v, v === g.p ? SPRITES[g.shipId] : SPRITES[BOT_SHIP], v === g.p ? 14 : BOT_RADIUS, x0, y0, s.x, s.y));
       if (!hit) continue;
       if (s.slow) {
         // Un misil ralentizador no hace daño: sólo frena la nave durante su tiempo; volver a impactar lo renueva
@@ -2413,6 +2416,39 @@
   function drawShipSprite(cx, cy, angle, sprite) {
     const k = frameOf(angle, sprite);
     ctx.drawImage(sprite.frames[k], cx - sprite.pivot.x, cy - sprite.pivot.y);
+  }
+
+  // Mitad de la caja de impacto de un sprite: la distancia máxima, en x o en y, del píxel visible más alejado
+  // del pivote, mirando todos los frames. La caja queda cuadrada y centrada en la nave
+  function spriteHalf(imgs, data) {
+    const w = data.canvas.width, h = data.canvas.height;
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const cx2 = c.getContext('2d', { willReadFrequently: true });
+    let half = 0;
+    for (const img of imgs) {
+      cx2.clearRect(0, 0, w, h);
+      cx2.drawImage(img, 0, 0);
+      const d = cx2.getImageData(0, 0, w, h).data;
+      for (let i = 0; i < w * h; i++) {
+        if (d[i * 4 + 3] <= 60) continue;
+        const dx = i % w + 0.5 - data.pivot.x, dy = Math.floor(i / w) + 0.5 - data.pivot.y;
+        half = Math.max(half, Math.abs(dx), Math.abs(dy));
+      }
+    }
+    return Math.ceil(half);
+  }
+
+  // ¿Toca el tramo (x0, y0)-(x1, y1) la caja cuadrada de la nave v? Con sprite, su mitad; sin sprite, r.
+  // El tramo se muestrea cada 2 px, para que una bala rápida no atraviese la caja
+  function shipHit(v, sp, r, x0, y0, x1, y1) {
+    const half = sp ? sp.half : r;
+    const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 2));
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      if (Math.abs(x0 + (x1 - x0) * t - v.x) <= half && Math.abs(y0 + (y1 - y0) * t - v.y) <= half) return true;
+    }
+    return false;
   }
 
   // Nave con sprite 2,5D: las llamas van detrás de la nave, o delante si se ve la cola
@@ -4944,7 +4980,7 @@
         img.onload = () => resolve(img);
         img.onerror = reject;
         img.src = 'sprites/' + ruta + '/' + f.file;
-      }))).then(imgs => ({ frames: imgs, pivot: data.pivot, count: imgs.length, tilt: data.tiltDeg * Math.PI / 180 })))
+      }))).then(imgs => ({ frames: imgs, half: spriteHalf(imgs, data), pivot: data.pivot, count: imgs.length, tilt: data.tiltDeg * Math.PI / 180 })))
       .catch(() => null);
   }
 
