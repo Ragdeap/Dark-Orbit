@@ -286,12 +286,12 @@
   const BOT_SIGHT = 900;          // distancia a la que el bot detecta un NPC
   const BOT_RANGE = 350;          // alcance de disparo del bot
   const BOT_COOL = 0.8;           // segundos entre disparos
-  const BOT_LASER = 'LF1';        // láser equipado por los bots; de momento cualquiera, el de la Fénix por defecto
+  const BOT_LASER = 'LF1';        // láser equipado por los bots; de momento cualquiera, el de la Phoenix por defecto
   const BOT_BULLET_SPEED = 900;
   const BOT_RESPAWN = 5;          // segundos hasta reaparecer en la base de su empresa
   const DEATH_HONOR_LOSS = 0.04;  // fracción del honor que se pierde al morir (bots y jugador)
   const BOT_RADIUS = 16;
-  // Nave de los bots: deben ser naves reales del juego. De momento solo la Fénix (la de administrador no es legal)
+  // Nave de los bots: deben ser naves reales del juego. De momento solo la Phoenix (la de administrador no es legal)
   const BOT_SHIP = 'PHOENIX';
   // enemy: de empresa rival; es hostil al jugador de forma permanente y no cruza puertas (de momento sólo en 3-1)
   const BOTS = [
@@ -2247,12 +2247,12 @@
     ctx.restore();
   }
 
-  // Llamas de cada motor de la Fénix: salen de la tobera, con la misma orientación y cámara que el sprite
-  function drawFenixFlames(cx, cy, angle) {
+  // Llamas de cada motor de la Phoenix: salen de la tobera, con la misma orientación y cámara que el sprite
+  function drawPhoenixFlames(cx, cy, angle) {
     const deg = angle * 180 / Math.PI;
-    const k = ((Math.round((deg - 180) / 11.25) % FENIX.count) + FENIX.count) % FENIX.count;
+    const k = ((Math.round((deg - 180) / 11.25) % PHOENIX_SPRITE.count) + PHOENIX_SPRITE.count) % PHOENIX_SPRITE.count;
     const phi = (180 - k * 11.25) * Math.PI / 180;
-    const cp = Math.cos(phi), sp = Math.sin(phi), ce = Math.cos(FENIX.tilt), se = Math.sin(FENIX.tilt);
+    const cp = Math.cos(phi), sp = Math.sin(phi), ce = Math.cos(PHOENIX_SPRITE.tilt), se = Math.sin(PHOENIX_SPRITE.tilt);
     // Hacia atrás de la nave en pantalla (el morro apunta a (cp, -sp*se))
     const back = norm2(-cp, sp * se);
     const perp = [-back[1], back[0]];
@@ -2289,10 +2289,10 @@
     return [x / l, y / l];
   }
 
-  function drawFenix(cx, cy, angle) {
+  function drawPhoenixSprite(cx, cy, angle) {
     const deg = angle * 180 / Math.PI;
-    const k = ((Math.round((deg - 180) / 11.25) % FENIX.count) + FENIX.count) % FENIX.count;
-    ctx.drawImage(FENIX.frames[k], cx - FENIX.pivot.x, cy - FENIX.pivot.y);
+    const k = ((Math.round((deg - 180) / 11.25) % PHOENIX_SPRITE.count) + PHOENIX_SPRITE.count) % PHOENIX_SPRITE.count;
+    ctx.drawImage(PHOENIX_SPRITE.frames[k], cx - PHOENIX_SPRITE.pivot.x, cy - PHOENIX_SPRITE.pivot.y);
   }
 
   function drawPlayer() {
@@ -2303,7 +2303,7 @@
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(p.angle);
-    if (!FENIX) {
+    if (!PHOENIX_SPRITE) {
       if (moving) {
         ctx.fillStyle = '#ffb347';
         ctx.beginPath();
@@ -2319,9 +2319,9 @@
       ctx.stroke();
     }
     ctx.restore();
-    if (FENIX) {
-      if (moving && SHIPS[g.shipId].engines) drawFenixFlames(cx, cy, p.angle);
-      drawFenix(cx, cy, p.angle);
+    if (PHOENIX_SPRITE) {
+      if (moving && SHIPS[g.shipId].engines) drawPhoenixFlames(cx, cy, p.angle);
+      drawPhoenixSprite(cx, cy, p.angle);
     }
     if (repairActive) drawRepairBot(cx, cy);
     // Barras sobre la nave: la vida siempre; el escudo sólo si hay escudo equipado y le queda carga
@@ -4807,17 +4807,17 @@
       .catch(() => {});   // Sin catálogo: el juego sigue, sin extras
   }
 
-  // Sprites 2,5D de la Fénix: 32 frames de 11,25° cargados al arrancar. Sin ellos se dibuja el polígono de siempre
-  let FENIX = null;
-  function loadFenix() {
-    return fetch('sprites/fenix/frames.json')
+  // Sprites 2,5D de la Phoenix: 32 frames de 11,25° cargados al arrancar. Sin ellos se dibuja el polígono de siempre
+  let PHOENIX_SPRITE = null;
+  function loadPhoenixSprite() {
+    return fetch('sprites/phoenix/frames.json')
       .then(r => r.json())
       .then(data => Promise.all(data.frames.map(f => new Promise((resolve, reject) => {
         const img = new Image();
         img.onload = () => resolve(img);
         img.onerror = reject;
-        img.src = 'sprites/fenix/' + f.file;
-      }))).then(imgs => { FENIX = { frames: imgs, pivot: data.pivot, count: imgs.length, tilt: data.tiltDeg * Math.PI / 180 }; }))
+        img.src = 'sprites/phoenix/' + f.file;
+      }))).then(imgs => { PHOENIX_SPRITE = { frames: imgs, pivot: data.pivot, count: imgs.length, tilt: data.tiltDeg * Math.PI / 180 }; }))
       .catch(() => {});
   }
 
@@ -4830,7 +4830,7 @@
   }
 
   // El botón de entrar se activa cuando el progreso y los catálogos de extras y misiones están cargados
-  Promise.all([readSave(), loadExtras(), loadMissions(), loadFenix()]).then(([d]) => {
+  Promise.all([readSave(), loadExtras(), loadMissions(), loadPhoenixSprite()]).then(([d]) => {
     if (!loadGame(d)) reset();
     addEventListener('pagehide', saveGame);
     const entrar = document.getElementById('entrar');
