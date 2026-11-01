@@ -254,7 +254,7 @@
   const ALIEN = {
     // passive: solo atacan si se les dispara. flee: huyen al bajar a esa fracción de vida.
     // pem: al bajar a esa fracción de vida hay una tirada (chance) en la que lanzan un PEM que quita el objetivo fijado por la nave.
-    streuner: { name: 'Streuner', sides: 4, r: 16, hp: 800,  shield: 400,  speed: 280, dmg: 20, range: 260, aggro: 350, cool: 1.6, shots: 1, rewards: { exp: 400, honor: 2, credits: 400, uridium: 1, cargo: { prometium: 10, endurium: 10 } }, maps: STREUNER_MAPS, color: '#e0553f', passive: true },
+    streuner: { name: 'Streuner', sprite: 'streuner', weight: 3, sides: 4, r: 16, hp: 800,  shield: 400,  speed: 280, dmg: 20, range: 260, aggro: 350, cool: 1.6, shots: 1, rewards: { exp: 400, honor: 2, credits: 400, uridium: 1, cargo: { prometium: 10, endurium: 10 } }, maps: STREUNER_MAPS, color: '#e0553f', passive: true },
     // Variantes del Streuner (alcance, cadencia y recompensa provisionales)
     recruit:  { name: 'Recruit Streuner', sides: 4, r: 18, hp: 600,  shield: 800,  speed: 270, dmg: 40, range: 280, aggro: 380, cool: 1.4, shots: 1, rewards: { exp: 500, honor: 3, credits: 600, uridium: 2, cargo: { prometium: 12, endurium: 12 } }, maps: STREUNER_MAPS, color: '#e07a3f', flee: 0.2 },
     // Sin velocidad propia: iguala la de la nave a la que asiste (ver escortOf)
@@ -340,7 +340,24 @@
 
   const RANGE = 480;
   const MISS_CHANCE = 0.2;   // probabilidad de que un disparo de NPC falle
-  const ALIEN_CAP = 18;
+  // Población de NPC por mapa: X1 unos 30, X2 unos 60, X3 y X4 entre 20 y 40 (un número fijo para cada mapa en cada partida)
+  const MAP_CAPS = {};
+  function alienCap(z) {
+    const n = z.id.split('-')[1];
+    if (n === '1') return 30;
+    if (n === '2') return 60;
+    MAP_CAPS[z.id] = MAP_CAPS[z.id] || Math.round(rnd(20, 40));
+    return MAP_CAPS[z.id];
+  }
+  // Manadas: la mayoría de las veces los NPC aparecen en grupo (un Aider, un Recruit y tres Streuner); el resto, solos
+  const PACK = ['aider', 'recruit', 'streuner', 'streuner', 'streuner'];
+  const PACK_CHANCE = 0.7;
+  const PACK_SPREAD = 110;   // radio en el que se reparten los miembros de la manada
+  const IDLE_SPEED = 90;     // velocidad de paseo de un NPC sin objetivo
+  // Rutina sin combate: al llegar a un punto, el NPC se queda rondando un rato (ALIEN.loiter lo cambia por tipo)
+  const LOITER = [5, 12];
+  const ROAM_NEAR = 1200;    // radio de los paseos cortos
+  const ROAM_FAR_CHANCE = 0.3; // probabilidad de elegir un punto lejano en el mapa
   const SPAWN_SAFE = 600;
 
   const UPGRADES = [
@@ -450,12 +467,18 @@
 
   // NPC de un mapa para guardar (sólo lo que hace falta para volver a encontrarlos) y para restaurarlos
   function saveAliens(list) {
-    return list.map(a => ({ type: a.type, x: a.x, y: a.y, home: a.home, hp: a.hp, shield: a.shield, pemDone: a.pemDone }));
+    return list.map(a => ({ type: a.type, x: a.x, y: a.y, home: a.home, pack: a.pack, off: a.off, hp: a.hp, shield: a.shield, pemDone: a.pemDone }));
   }
   function restoreAliens(list) {
-    return (list || []).filter(a => ALIEN[a.type]).map(a => ({
-      ...a, vx: 0, vy: 0, aggro: false, cool: rnd(0.5, 1.5), wa: 0, wt: 0, hit: 0,
-    }));
+    const homes = {};
+    return (list || []).filter(a => ALIEN[a.type]).map(a => {
+      let home = a.home;
+      if (a.pack) {
+        homes[a.pack] = homes[a.pack] || { x: a.home.x, y: a.home.y, loiter: false, wt: 0 };
+        home = homes[a.pack];
+      }
+      return { ...a, home, vx: 0, vy: 0, aggro: false, cool: rnd(0.5, 1.5), wa: 0, wt: 0, hit: 0 };
+    });
   }
 
   // Cambia de mapa. Sin "spawn" la nave aparece en la base; si se cruza una puerta, junto a su enlace
@@ -645,21 +668,101 @@
     return Object.keys(ALIEN).filter(k => ALIEN[k].maps && ALIEN[k].maps.includes(z.id));
   }
 
-  function spawnAlien(types) {
+  // Punto libre del mapa, lejos de la base
+  // Siguiente punto de paseo, dentro del 80 % central: lo normal es uno cercano; a veces, uno lejano
+  function nextRoamPoint(x, y) {
     const z = g.zone;
-    const type = types[Math.floor(Math.random() * types.length)];
+    if (Math.random() < ROAM_FAR_CHANCE) return { x: rnd(z.w * 0.1, z.w * 0.9), y: rnd(z.h * 0.1, z.h * 0.9) };
+    const ang = rnd(0, Math.PI * 2), d = rnd(200, ROAM_NEAR);
+    return { x: clamp(x + Math.cos(ang) * d, z.w * 0.1, z.w * 0.9), y: clamp(y + Math.sin(ang) * d, z.h * 0.1, z.h * 0.9) };
+  }
+
+  // Velocidad hacia un punto; parado si ya está muy cerca
+  function headTo(a, x, y, speed) {
+    const dx = x - a.x, dy = y - a.y, d = Math.hypot(dx, dy);
+    if (d < 10) return { wx: 0, wy: 0 };
+    return { wx: dx / d * speed, wy: dy / d * speed };
+  }
+
+  // Punto de una manada: camina despacio hacia su siguiente punto y, al llegar, se queda rondando
+  function moveHome(h, dt) {
+    if (h.tx === undefined) { const p = nextRoamPoint(h.x, h.y); h.tx = p.x; h.ty = p.y; }
+    if (h.loiter) {
+      h.wt -= dt;
+      if (h.wt <= 0) { const p = nextRoamPoint(h.x, h.y); h.tx = p.x; h.ty = p.y; h.loiter = false; }
+      return;
+    }
+    if (dist(h.x, h.y, h.tx, h.ty) < 40) { h.loiter = true; h.wt = rnd(LOITER[0], LOITER[1]); return; }
+    const dx = h.tx - h.x, dy = h.ty - h.y, d = Math.hypot(dx, dy) || 1;
+    h.x += dx / d * IDLE_SPEED * 0.5 * dt;
+    h.y += dy / d * IDLE_SPEED * 0.5 * dt;
+  }
+
+  // Movimiento sin combate: un NPC solo va de punto en punto y ronda cada uno; un miembro de manada sigue a su punto común
+  function idleMove(a, dt) {
+    if (a.pack) {
+      moveHome(a.home, dt);
+      return headTo(a, a.home.x + a.off.x, a.home.y + a.off.y, IDLE_SPEED);
+    }
+    if (a.tx === undefined) { const p = nextRoamPoint(a.x, a.y); a.tx = p.x; a.ty = p.y; }
+    if (a.loiter) {
+      a.wt -= dt;
+      if (a.wt <= 0) { const p = nextRoamPoint(a.x, a.y); a.tx = p.x; a.ty = p.y; a.loiter = false; }
+      return { wx: 0, wy: 0 };
+    }
+    if (dist(a.x, a.y, a.tx, a.ty) < 40) {
+      a.loiter = true;
+      const lo = ALIEN[a.type].loiter || LOITER;
+      a.wt = rnd(lo[0], lo[1]);
+      return { wx: 0, wy: 0 };
+    }
+    return headTo(a, a.tx, a.ty, IDLE_SPEED);
+  }
+
+  function freeSpot() {
+    const z = g.zone;
     let x, y, tries = 0;
     do {
-      x = rnd(200, z.w - 200);
-      y = rnd(200, z.h - 200);
+      x = rnd(z.w * 0.1, z.w * 0.9);
+      y = rnd(z.h * 0.1, z.h * 0.9);
       tries++;
     } while (z.base && dist(x, y, z.base.x, z.base.y) < Math.max(SPAWN_SAFE, z.base.r) && tries < 20);
+    return { x, y };
+  }
+
+  // home: punto al que vuelve el NPC cuando no tiene objetivo. Por defecto, el de su aparición
+  // pack: id de la manada (0 si va solo). home: punto de la manada o de su aparición
+  function addAlien(type, x, y, home = { x, y }, pack = 0) {
     const t = ALIEN[type];
-    g.aliens.push({
-      type, x, y, home: { x, y }, vx: 0, vy: 0,
+    const a = {
+      type, x, y, home, pack, vx: 0, vy: 0,
       hp: t.hp, shield: t.shield, aggro: false, cool: rnd(0.5, 1.5),
       wa: 0, wt: 0, hit: 0,
-    });
+    };
+    g.aliens.push(a);
+    return a;
+  }
+
+  function spawnAlien(types) {
+    // Al azar, ponderado por weight (1 si no lo tiene): el Streuner sale tres veces más que los demás
+    let r = Math.random() * types.reduce((sum, k) => sum + (ALIEN[k].weight || 1), 0);
+    const type = types.find(k => (r -= ALIEN[k].weight || 1) < 0) || types[types.length - 1];
+    const at = freeSpot();
+    addAlien(type, at.x, at.y);
+  }
+
+  // Manada: un miembro de PACK por cada tipo que el mapa permite. Comparten un punto (su casa) que va
+  // recorriendo el mapa; cada miembro mantiene su distancia a ese punto, así que sin combate siguen juntos
+  function spawnPack(types) {
+    const c = freeSpot();
+    const id = Math.floor(Math.random() * 1e9) + 1;
+    const home = { x: c.x, y: c.y, loiter: false, wt: 0 };
+    for (const type of PACK) {
+      if (!types.includes(type)) continue;
+      const a = rnd(0, Math.PI * 2), d = rnd(20, PACK_SPREAD);
+      const m = addAlien(type, c.x + Math.cos(a) * d, c.y + Math.sin(a) * d, home, id);
+      m.off = { x: Math.cos(a) * d, y: Math.sin(a) * d };
+    }
   }
 
   function nearestAlien(x, y, r) {
@@ -1359,7 +1462,12 @@
     p.hp = Math.min(p.hp, maxHpNow());
     updateRanks();
     const types = zoneTypes(g.zone);
-    while (g.aliens.length < ALIEN_CAP && types.length) spawnAlien(types);
+    const canPack = PACK.some(k => types.includes(k));
+    const cap = alienCap(g.zone);
+    while (g.aliens.length < cap && types.length) {
+      if (canPack && Math.random() < PACK_CHANCE && g.aliens.length + PACK.length <= cap) spawnPack(types);
+      else spawnAlien(types);
+    }
 
     if (!p.dead) updatePlayer(dt);
     tickBoosts(dt);
@@ -1491,9 +1599,11 @@
 
   // Escolta que el Aider cura con su rayo: el más dañado dentro de su alcance, o null
   function healTarget(a) {
+    // Un NPC muerto sigue en la lista hasta el final del frame: ni se cura ni cura
+    if (a.hp <= 0) return null;
     let best = null, bf = 1;
     for (const e of g.aliens) {
-      if (!ESCORT_TYPES.includes(e.type) || dist(a.x, a.y, e.x, e.y) > ALIEN.aider.range) continue;
+      if (e.hp <= 0 || !ESCORT_TYPES.includes(e.type) || dist(a.x, a.y, e.x, e.y) > ALIEN.aider.range) continue;
       const f = e.hp / ALIEN[e.type].hp;
       if (f < bf) { bf = f; best = e; }
     }
@@ -1591,18 +1701,21 @@
           wy = ex / ed * sp * 0.5 + ey / ed * pull;
         }
       } else {
-        a.wt -= dt;
-        if (a.wt <= 0) { a.wa = rnd(0, Math.PI * 2); a.wt = rnd(2, 4); }
-        const hx = a.home.x - a.x, hy = a.home.y - a.y, hd = Math.hypot(hx, hy) || 1;
-        wx = Math.cos(a.wa) * 25; wy = Math.sin(a.wa) * 25;
-        if (hd > 200) { wx += hx / hd * 60; wy += hy / hd * 60; }
+        // Sin objetivo: sigue su rutina de paseo
+        const m = idleMove(a, dt);
+        wx = m.wx; wy = m.wy;
       }
 
       const k = 1 - Math.exp(-3 * dt);
       a.vx += (wx - a.vx) * k;
       a.vy += (wy - a.vy) * k;
-      a.x = clamp(a.x + a.vx * dt, 20, z.w - 20);
-      a.y = clamp(a.y + a.vy * dt, 20, z.h - 20);
+      // Sin combate se quedan en el 80 % central del mapa; solo huyendo o atacando llegan a los bordes
+      const mx = a.aggro ? 20 : z.w * 0.1, my = a.aggro ? 20 : z.h * 0.1;
+      a.x = clamp(a.x + a.vx * dt, mx, z.w - mx);
+      a.y = clamp(a.y + a.vy * dt, my, z.h - my);
+      // El morro mira a su objetivo solo en combate (no al huir); sin combate, hacia donde se mueve
+      if (a.aggro && a.victim && !a.fleeing) a.heading = Math.atan2(a.victim.y - a.y, a.victim.x - a.x);
+      else if (Math.hypot(a.vx, a.vy) > 5) a.heading = Math.atan2(a.vy, a.vx);
       pushOutOfBase(a, null, z);
       a.hit = Math.max(0, a.hit - dt);
     }
@@ -1966,10 +2079,17 @@
     for (const a of g.aliens) {
       const t = ALIEN[a.type];
       const x = sx(a.x), y = sy(a.y);
-      const rot = Math.atan2(p.y - a.y, p.x - a.x);
+      const rot = a.heading || 0;
       const flash = a.hit > 0;
       ctx.save();
-      drawPoly(x, y, rot, polyPts(t.sides, t.r), flash ? '#ffffff' : t.color, '#ffffff22');
+      const sprite = NPC_SPRITES[a.type];
+      if (sprite) {
+        ctx.filter = flash ? 'brightness(3)' : 'none';
+        drawShipSprite(x, y, rot, sprite);
+        ctx.filter = 'none';
+      } else {
+        drawPoly(x, y, rot, polyPts(t.sides, t.r), flash ? '#ffffff' : t.color, '#ffffff22');
+      }
       if (a.hp < t.hp || a.aggro) bar(x - 18, y - t.r - 10, 36, 4, a.hp / t.hp, '#5dff8a');
       if (a.shield > 0 && a.shield < t.shield) bar(x - 18, y - t.r - 15, 36, 3, a.shield / t.shield, '#5ac8ff');
       if (g.p.target === a) {
@@ -4816,16 +4936,22 @@
 
   // Sprites 2,5D: 32 frames de 11,25° por nave, en sprites/naves/<carpeta>. Sin ellos se dibuja el polígono de siempre
   let SPRITES = {};
-  function loadSprite(carpeta) {
-    return fetch('sprites/naves/' + carpeta + '/frames.json')
+  function loadSprite(ruta) {
+    return fetch('sprites/' + ruta + '/frames.json')
       .then(r => r.json())
       .then(data => Promise.all(data.frames.map(f => new Promise((resolve, reject) => {
         const img = new Image();
         img.onload = () => resolve(img);
         img.onerror = reject;
-        img.src = 'sprites/naves/' + carpeta + '/' + f.file;
+        img.src = 'sprites/' + ruta + '/' + f.file;
       }))).then(imgs => ({ frames: imgs, pivot: data.pivot, count: imgs.length, tilt: data.tiltDeg * Math.PI / 180 })))
       .catch(() => null);
+  }
+
+  // Sprites 2,5D de los NPC que lo tienen (campo sprite de ALIEN), en sprites/npc/<carpeta>
+  let NPC_SPRITES = {};
+  function loadNpcSprites() {
+    return Promise.all(Object.keys(ALIEN).filter(t => ALIEN[t].sprite).map(t => loadSprite('npc/' + ALIEN[t].sprite).then(sp => { if (sp) NPC_SPRITES[t] = sp; })));
   }
 
   // Naves, pasivas, láseres, generadores, munición y misiles: sin ellos no hay juego, así que un fallo se muestra como servidor no disponible
@@ -4834,7 +4960,7 @@
     return Promise.all([cargar('naves.json'), cargar('pasivas-naves.json'), cargar('laseres.json'), cargar('generadores.json'), cargar('municion.json'), cargar('misiles.json')])
       .then(([naves, pasivas, laseres, generadores, municion, misiles]) => {
         SHIPS = naves; LOW_MAP_PASSIVES = pasivas; LASERS = laseres; GENERATORS = generadores; AMMO = municion; MISSILES = misiles;
-        return Promise.all(Object.keys(SHIPS).filter(id => SHIPS[id].sprite).map(id => loadSprite(SHIPS[id].sprite).then(sp => { if (sp) SPRITES[id] = sp; })));
+        return Promise.all(Object.keys(SHIPS).filter(id => SHIPS[id].sprite).map(id => loadSprite('naves/' + SHIPS[id].sprite).then(sp => { if (sp) SPRITES[id] = sp; })));
       });
   }
 
@@ -4847,7 +4973,7 @@
   }
 
   // El botón de entrar se activa cuando el progreso, el equipo y los catálogos de extras y misiones están cargados
-  Promise.all([readSave(), loadEquipo(), loadExtras(), loadMissions()]).then(([d]) => {
+  Promise.all([readSave(), loadEquipo(), loadNpcSprites(), loadExtras(), loadMissions()]).then(([d]) => {
     if (!loadGame(d)) reset();
     addEventListener('pagehide', saveGame);
     const entrar = document.getElementById('entrar');
