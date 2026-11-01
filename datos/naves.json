@@ -10,7 +10,84 @@
     "genSlots": 1,
     "extraSlots": 1,
     "cargo": 100,
-    "sprite": true,
+    "sprite": "phoenix",
+    "engines": [
+      {
+        "x": -40,
+        "z": 0
+      }
+    ],
+    "flame": {
+      "len": 30,
+      "w": 7
+    }
+  },
+  "LIBERATOR": {
+    "name": "Liberator",
+    "category": "Nave de introducción",
+    "subcategory": "Nave de transporte / escolta ligera",
+    "hp": 116000,
+    "speed": 300,
+    "slots": 4,
+    "missSlots": 1,
+    "genSlots": 6,
+    "extraSlots": 2,
+    "cargo": 400,
+    "sprite": "liberator",
+    "engines": [
+      {
+        "x": -28,
+        "z": 5
+      },
+      {
+        "x": -28,
+        "z": -5
+      }
+    ],
+    "flame": {
+      "len": 22,
+      "w": 5
+    }
+  },
+  "PIRANHA": {
+    "name": "Piranha",
+    "category": "Naves Especializadas de Gama Media",
+    "subcategory": "Interceptora",
+    "hp": 164000,
+    "speed": 360,
+    "slots": 6,
+    "missSlots": 1,
+    "genSlots": 8,
+    "extraSlots": 2,
+    "cargo": 600,
+    "sprite": "piranha",
+    "engines": [
+      {
+        "x": -38,
+        "z": 3
+      },
+      {
+        "x": -38,
+        "z": -3
+      }
+    ],
+    "flame": {
+      "len": 24,
+      "w": 4
+    }
+  },
+  "NOSTROMO": {
+    "name": "Nostromo",
+    "category": "Naves Especializadas de Gama Media",
+    "subcategory": "Caza de Apoyo Táctico",
+    "hp": 220000,
+    "speed": 340,
+    "slots": 7,
+    "missSlots": 1,
+    "genSlots": 10,
+    "extraSlots": 3,
+    "cargo": 700,
+    "sprite": "nostromo",
     "engines": [
       {
         "x": -41,
@@ -26,42 +103,6 @@
       "w": 4
     }
   },
-  "LIBERATOR": {
-    "name": "Liberator",
-    "category": "Nave de introducción",
-    "subcategory": "Nave de transporte / escolta ligera",
-    "hp": 116000,
-    "speed": 300,
-    "slots": 4,
-    "missSlots": 1,
-    "genSlots": 6,
-    "extraSlots": 2,
-    "cargo": 400
-  },
-  "PIRANHA": {
-    "name": "Piranha",
-    "category": "Naves Especializadas de Gama Media",
-    "subcategory": "Interceptora",
-    "hp": 164000,
-    "speed": 360,
-    "slots": 6,
-    "missSlots": 1,
-    "genSlots": 8,
-    "extraSlots": 2,
-    "cargo": 600
-  },
-  "NOSTROMO": {
-    "name": "Nostromo",
-    "category": "Naves Especializadas de Gama Media",
-    "subcategory": "Caza de Apoyo Táctico",
-    "hp": 220000,
-    "speed": 340,
-    "slots": 7,
-    "missSlots": 1,
-    "genSlots": 10,
-    "extraSlots": 3,
-    "cargo": 700
-  },
   "BIGBOY": {
     "name": "Bigboy",
     "category": "Naves Especializadas de Gama Media",
@@ -72,7 +113,22 @@
     "missSlots": 1,
     "genSlots": 15,
     "extraSlots": 3,
-    "cargo": 800
+    "cargo": 800,
+    "sprite": "bigboy",
+    "engines": [
+      {
+        "x": -40,
+        "z": 8
+      },
+      {
+        "x": -40,
+        "z": -8
+      }
+    ],
+    "flame": {
+      "len": 26,
+      "w": 6
+    }
   },
   "LEONOV": {
     "name": "Leonov",
@@ -84,7 +140,22 @@
     "missSlots": 1,
     "genSlots": 6,
     "extraSlots": 1,
-    "cargo": 500
+    "cargo": 500,
+    "sprite": "leonov",
+    "engines": [
+      {
+        "x": -39,
+        "z": 5
+      },
+      {
+        "x": -39,
+        "z": -5
+      }
+    ],
+    "flame": {
+      "len": 28,
+      "w": 5
+    }
   },
   "VENGEANCE": {
     "name": "Vengeance",
@@ -96,7 +167,22 @@
     "missSlots": 1,
     "genSlots": 10,
     "extraSlots": 2,
-    "cargo": 1000
+    "cargo": 1000,
+    "sprite": "vengeance",
+    "engines": [
+      {
+        "x": -42,
+        "z": 3
+      },
+      {
+        "x": -42,
+        "z": -3
+      }
+    ],
+    "flame": {
+      "len": 26,
+      "w": 4
+    }
   },
   "GOLIATH": {
     "name": "Goliath",
@@ -108,6 +194,21 @@
     "missSlots": 1,
     "genSlots": 15,
     "extraSlots": 3,
-    "cargo": 1500
+    "cargo": 1500,
+    "sprite": "goliath",
+    "engines": [
+      {
+        "x": -52,
+        "z": 6
+      },
+      {
+        "x": -52,
+        "z": -6
+      }
+    ],
+    "flame": {
+      "len": 30,
+      "w": 6
+    }
   }
 }

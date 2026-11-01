@@ -431,7 +431,7 @@
       generators: {},
       missiles: {},
       extras: {},
-      inv: { lasers: { LF1: 1 }, generators: {}, missiles: {}, extras: { REP1: 1 }, ships: { PHOENIX: 1 } },
+      inv: { lasers: { LF1: 1 }, generators: {}, missiles: {}, extras: { REP1: 1 }, ships: { PHOENIX: 1 } }, // PRUEBA: sólo la Phoenix; añadir aquí las naves que se quieran probar
       hangar: { open: false, sel: { type: 'laser', i: 0 } },
       allies: BOTS.map((b, i) => ({
         id: i, name: b.name, zi: ZONES.findIndex(z => z.id === b.zone), exp: 0, honor: 0,
@@ -1628,6 +1628,7 @@
         if (b.respawnT <= 0) respawnBot(b);
         continue;
       }
+      const x0 = b.x, y0 = b.y;
       if (b.zi === g.zi) {
         updateBotActive(b, dt);
         pushOutOfBase(b, b.company, g.zone);
@@ -1635,6 +1636,7 @@
         b.hopT -= dt;
         if (b.hopT <= 0) crossBotPortal(b);
       }
+      b.moving = dist(x0, y0, b.x, b.y) > 0.5;
     }
   }
 
@@ -1993,11 +1995,13 @@
       if (b.zi !== g.zi || b.dead) continue;
       const x = sx(b.x), y = sy(b.y);
       const color = b.enemy ? '#ff5c5c' : '#6fe39a';
-      drawPoly(x, y, b.angle, polyPts(3, 16), color, '#ffffff22');
+      const sprite = SPRITES[BOT_SHIP] || null;
+      if (sprite) drawNaveSprite(x, y, b.angle, sprite, SHIPS[BOT_SHIP], b.moving);
+      else drawPoly(x, y, b.angle, polyPts(3, 16), color, '#ffffff22');
       if (b.hp < b.maxHp) bar(x - 18, y - 26, 36, 4, b.hp / b.maxHp, '#ff5c5c');
       if (g.p.target === b) {
         ctx.beginPath();
-        ctx.arc(x, y, 24, 0, Math.PI * 2);
+        ctx.arc(x, y, sprite ? 40 : 24, 0, Math.PI * 2);
         ctx.strokeStyle = g.p.attacking ? '#ff4d6d' : '#ffd166';
         ctx.lineWidth = 1.5;
         ctx.stroke();
@@ -2233,22 +2237,21 @@
     ctx.restore();
   }
 
-  // Llamas de cada motor de la Phoenix: salen de la tobera, con la misma orientación y cámara que el sprite
-  function drawPhoenixFlames(cx, cy, angle) {
-    const deg = angle * 180 / Math.PI;
-    const k = ((Math.round((deg - 180) / 11.25) % PHOENIX_SPRITE.count) + PHOENIX_SPRITE.count) % PHOENIX_SPRITE.count;
+  // Llamas de cada motor de la nave: salen de la tobera, con la misma orientación y cámara que el sprite
+  function drawShipFlames(cx, cy, angle, sprite, ship) {
+    const k = frameOf(angle, sprite);
     const phi = (180 - k * 11.25) * Math.PI / 180;
-    const cp = Math.cos(phi), sp = Math.sin(phi), ce = Math.cos(PHOENIX_SPRITE.tilt), se = Math.sin(PHOENIX_SPRITE.tilt);
+    const cp = Math.cos(phi), sp = Math.sin(phi), ce = Math.cos(sprite.tilt), se = Math.sin(sprite.tilt);
     // Hacia atrás de la nave en pantalla (el morro apunta a (cp, -sp*se))
     const back = norm2(-cp, sp * se);
     const perp = [-back[1], back[0]];
-    for (const e of SHIPS[g.shipId].engines) {
+    for (const e of ship.engines) {
       // Tobera en el plano del suelo (Y = 0): su posición en pantalla. La llama arranca 3 px dentro del motor,
       // para que el sprite la tape en la base y no parezca que sale de debajo cuando la nave mira hacia arriba
       const wx = e.x * cp - e.z * sp, wz = e.x * sp + e.z * cp;
       const ex = cx + wx - back[0] * 3, ey = cy - wz * se - back[1] * 3;
-      const len = SHIPS[g.shipId].flame.len * (0.85 + rnd(0, 0.3));
-      const w = SHIPS[g.shipId].flame.w;
+      const len = ship.flame.len * (0.85 + rnd(0, 0.3));
+      const w = ship.flame.w;
       const tipX = ex + back[0] * len, tipY = ey + back[1] * len;
       const grad = ctx.createLinearGradient(ex, ey, tipX, tipY);
       grad.addColorStop(0, 'rgba(255,255,255,0.95)');
@@ -2270,15 +2273,35 @@
     }
   }
 
+  // Frame que corresponde al ángulo de la nave
+  function frameOf(angle, sprite) {
+    const deg = angle * 180 / Math.PI;
+    return ((Math.round((deg - 180) / 11.25) % sprite.count) + sprite.count) % sprite.count;
+  }
+
+  // Con la tobera hacia la cámara (se ve la cola), la llama queda delante de la nave
+  function colaHaciaCamara(angle, sprite) {
+    const phi = (180 - frameOf(angle, sprite) * 11.25) * Math.PI / 180;
+    return Math.sin(phi) * Math.cos(sprite.tilt) > 0;
+  }
+
   function norm2(x, y) {
     const l = Math.hypot(x, y);
     return [x / l, y / l];
   }
 
-  function drawPhoenixSprite(cx, cy, angle) {
-    const deg = angle * 180 / Math.PI;
-    const k = ((Math.round((deg - 180) / 11.25) % PHOENIX_SPRITE.count) + PHOENIX_SPRITE.count) % PHOENIX_SPRITE.count;
-    ctx.drawImage(PHOENIX_SPRITE.frames[k], cx - PHOENIX_SPRITE.pivot.x, cy - PHOENIX_SPRITE.pivot.y);
+  function drawShipSprite(cx, cy, angle, sprite) {
+    const k = frameOf(angle, sprite);
+    ctx.drawImage(sprite.frames[k], cx - sprite.pivot.x, cy - sprite.pivot.y);
+  }
+
+  // Nave con sprite 2,5D: las llamas van detrás de la nave, o delante si se ve la cola
+  function drawNaveSprite(cx, cy, angle, sprite, ship, moving) {
+    const flames = moving && ship.engines;
+    const delante = flames && colaHaciaCamara(angle, sprite);
+    if (flames && !delante) drawShipFlames(cx, cy, angle, sprite, ship);
+    drawShipSprite(cx, cy, angle, sprite);
+    if (delante) drawShipFlames(cx, cy, angle, sprite, ship);
   }
 
   function drawPlayer() {
@@ -2286,7 +2309,7 @@
     if (p.dead) return;
     const cx = W / 2, cy = H / 2;
     const moving = Math.hypot(p.vx, p.vy) > 20;
-    const sprite = SHIPS[g.shipId].sprite ? PHOENIX_SPRITE : null;
+    const sprite = SPRITES[g.shipId] || null;
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(p.angle);
@@ -2306,10 +2329,7 @@
       ctx.stroke();
     }
     ctx.restore();
-    if (sprite) {
-      if (moving && SHIPS[g.shipId].engines) drawPhoenixFlames(cx, cy, p.angle);
-      drawPhoenixSprite(cx, cy, p.angle);
-    }
+    if (sprite) drawNaveSprite(cx, cy, p.angle, sprite, SHIPS[g.shipId], moving);
     if (repairActive) drawRepairBot(cx, cy);
     // Barras sobre la nave: la vida siempre; el escudo sólo si hay escudo equipado y le queda carga
     const bw = 40, bx = cx - bw / 2;
@@ -4794,18 +4814,18 @@
       .catch(() => {});   // Sin catálogo: el juego sigue, sin extras
   }
 
-  // Sprites 2,5D de la Phoenix: 32 frames de 11,25° cargados al arrancar. Sin ellos se dibuja el polígono de siempre
-  let PHOENIX_SPRITE = null;
-  function loadPhoenixSprite() {
-    return fetch('sprites/naves/phoenix/frames.json')
+  // Sprites 2,5D: 32 frames de 11,25° por nave, en sprites/naves/<carpeta>. Sin ellos se dibuja el polígono de siempre
+  let SPRITES = {};
+  function loadSprite(carpeta) {
+    return fetch('sprites/naves/' + carpeta + '/frames.json')
       .then(r => r.json())
       .then(data => Promise.all(data.frames.map(f => new Promise((resolve, reject) => {
         const img = new Image();
         img.onload = () => resolve(img);
         img.onerror = reject;
-        img.src = 'sprites/naves/phoenix/' + f.file;
-      }))).then(imgs => { PHOENIX_SPRITE = { frames: imgs, pivot: data.pivot, count: imgs.length, tilt: data.tiltDeg * Math.PI / 180 }; }))
-      .catch(() => {});
+        img.src = 'sprites/naves/' + carpeta + '/' + f.file;
+      }))).then(imgs => ({ frames: imgs, pivot: data.pivot, count: imgs.length, tilt: data.tiltDeg * Math.PI / 180 })))
+      .catch(() => null);
   }
 
   // Naves, pasivas, láseres, generadores, munición y misiles: sin ellos no hay juego, así que un fallo se muestra como servidor no disponible
@@ -4814,6 +4834,7 @@
     return Promise.all([cargar('naves.json'), cargar('pasivas-naves.json'), cargar('laseres.json'), cargar('generadores.json'), cargar('municion.json'), cargar('misiles.json')])
       .then(([naves, pasivas, laseres, generadores, municion, misiles]) => {
         SHIPS = naves; LOW_MAP_PASSIVES = pasivas; LASERS = laseres; GENERATORS = generadores; AMMO = municion; MISSILES = misiles;
+        return Promise.all(Object.keys(SHIPS).filter(id => SHIPS[id].sprite).map(id => loadSprite(SHIPS[id].sprite).then(sp => { if (sp) SPRITES[id] = sp; })));
       });
   }
 
@@ -4826,7 +4847,7 @@
   }
 
   // El botón de entrar se activa cuando el progreso, el equipo y los catálogos de extras y misiones están cargados
-  Promise.all([readSave(), loadEquipo(), loadExtras(), loadMissions(), loadPhoenixSprite()]).then(([d]) => {
+  Promise.all([readSave(), loadEquipo(), loadExtras(), loadMissions()]).then(([d]) => {
     if (!loadGame(d)) reset();
     addEventListener('pagehide', saveGame);
     const entrar = document.getElementById('entrar');

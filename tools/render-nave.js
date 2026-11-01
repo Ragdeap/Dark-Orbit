@@ -1,5 +1,5 @@
-// Genera los 32 frames 2,5D de la nave Phoenix a partir de primitivas geométricas.
-// Uso: node tools/render-phoenix.js [--tilt 35] [--out sprites/naves/phoenix]
+// Genera los 32 frames 2,5D de una nave a partir de primitivas geométricas (modelo en tools/modelos/<modelo>.js).
+// Uso: node tools/render-nave.js [--modelo phoenix] [--tilt 35] [--out sprites/naves/phoenix]
 // Cámara ortográfica con inclinación hacia el suelo, luz fija desde arriba-izquierda y z-buffer.
 const fs = require('fs');
 const path = require('path');
@@ -19,7 +19,8 @@ function arg(name, def) {
 }
 const TILT_DEG = Number(arg('--tilt', 35));
 const TILT = TILT_DEG * Math.PI / 180;
-const OUT = path.join(ROOT, arg('--out', 'sprites/naves/phoenix'));
+const MODELO = arg('--modelo', 'phoenix');
+const OUT = path.join(ROOT, arg('--out', 'sprites/naves/' + MODELO));
 
 // Base de la cámara: R = derecha en pantalla, U = arriba en pantalla, C = hacia la cámara
 const CE = Math.cos(TILT), SE = Math.sin(TILT);
@@ -37,31 +38,8 @@ const AX = { x: 0, y: 1, z: 2 };
 // Luz fija desde arriba-izquierda, la misma para todos los frames
 const LIGHT = norm([0, 1, 2].map(i => -0.6 * R[i] + 0.8 * U[i] + 0.3 * C[i]));
 
-// Modelo: primitivas en unidades de mundo. Morro en +X, Y arriba, Z lateral. Simétrico en Z.
-const MODEL = [
-  // Fuselaje
-  { type: 'box', pos: [-4, 0, 0], size: [48, 8, 10], color: '#8fa3bf' },
-  // Morro: pirámide de cuatro triángulos
-  { type: 'tri', v: [[34, 0, 0], [20, -4, -5], [20, 4, -5]], color: '#ffd166' },
-  { type: 'tri', v: [[34, 0, 0], [20, 4, -5], [20, 4, 5]], color: '#ffd166' },
-  { type: 'tri', v: [[34, 0, 0], [20, 4, 5], [20, -4, 5]], color: '#ffd166' },
-  { type: 'tri', v: [[34, 0, 0], [20, -4, 5], [20, -4, -5]], color: '#ffd166' },
-  // Cabina
-  { type: 'box', pos: [6, 6, 0], size: [14, 4, 6], color: '#5ad1ff' },
-  // Alas en flecha: placas finas, una a cada lado
-  { type: 'tri', v: [[8, 1, 5], [-16, 1, 34], [-24, 1, 5]], color: '#3c4f6b' },
-  { type: 'tri', v: [[8, -1, 5], [-24, -1, 5], [-16, -1, 34]], color: '#3c4f6b' },
-  { type: 'tri', v: [[8, 1, -5], [-24, 1, -5], [-16, 1, -34]], color: '#3c4f6b' },
-  { type: 'tri', v: [[8, -1, -5], [-16, -1, -34], [-24, -1, -5]], color: '#3c4f6b' },
-  // Puntas de ala en rojo
-  { type: 'box', pos: [-16, 1, 34], size: [6, 2, 3], color: '#c8412b' },
-  { type: 'box', pos: [-16, 1, -34], size: [6, 2, 3], color: '#c8412b' },
-  // Aleta de cola
-  { type: 'tri', v: [[-18, 4, 0], [-32, 13, 0], [-26, 4, 0]], color: '#c8412b' },
-  // Motores: cilindros en el eje X, a cada lado de la cola
-  { type: 'cyl', pos: [-34, 0, 9], axis: 'x', len: 14, r: 3.5, color: '#d9534f' },
-  { type: 'cyl', pos: [-34, 0, -9], axis: 'x', len: 14, r: 3.5, color: '#d9534f' },
-];
+// Modelo: primitivas en unidades de mundo, en tools/modelos. Morro en +X, Y arriba, Z lateral
+const MODEL = require(path.join(__dirname, 'modelos', MODELO + '.js'));
 
 function boxFaces(p, s, color) {
   const h = s.map(v => v / 2);
