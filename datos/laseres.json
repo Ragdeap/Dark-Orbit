@@ -1,0 +1,38 @@
+{
+  "LF1": {
+    "name": "LF-1",
+    "damage": 65
+  },
+  "LF2": {
+    "name": "LF-2",
+    "damage": 140
+  },
+  "LF3": {
+    "name": "LF-3",
+    "damage": 175
+  },
+  "LF4": {
+    "name": "LF-4",
+    "damage": 200
+  },
+  "LF4X": {
+    "name": "LF-4 Inestable",
+    "min": 128,
+    "damage": 220
+  },
+  "LF4H": {
+    "name": "LF-4 Hyperplasmoid",
+    "damage": 225,
+    "hpBonus": 0.005
+  },
+  "LF4M": {
+    "name": "LF-4 Magmadrill",
+    "damage": 230,
+    "playerBonus": 5
+  },
+  "LF4P": {
+    "name": "LF-4 Paritydrill",
+    "damage": 230,
+    "npcBonus": 5
+  }
+}

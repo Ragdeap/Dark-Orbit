@@ -1,0 +1,52 @@
+{
+  "LCB10": {
+    "name": "LCB-10",
+    "mult": 1,
+    "cool": 0.25,
+    "speed": 900,
+    "life": 1,
+    "shots": 1,
+    "spread": 0,
+    "color": "#ff4d4d"
+  },
+  "MCB25": {
+    "name": "MCB-25",
+    "mult": 2,
+    "cool": 0.25,
+    "speed": 900,
+    "life": 1,
+    "shots": 1,
+    "spread": 0,
+    "color": "#4da6ff"
+  },
+  "MCB50": {
+    "name": "MCB-50",
+    "mult": 3,
+    "cool": 0.25,
+    "speed": 900,
+    "life": 1,
+    "shots": 1,
+    "spread": 0,
+    "color": "#4dff6a"
+  },
+  "UCB100": {
+    "name": "UCB-100",
+    "mult": 4,
+    "cool": 0.25,
+    "speed": 900,
+    "life": 1,
+    "shots": 1,
+    "spread": 0,
+    "color": "#fff7c2"
+  },
+  "RSB75": {
+    "name": "RSB-75",
+    "mult": 6,
+    "cool": 0.25,
+    "speed": 900,
+    "life": 1,
+    "shots": 1,
+    "spread": 0,
+    "color": "#ff9f1a"
+  }
+}

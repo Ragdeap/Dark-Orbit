@@ -305,59 +305,25 @@
     { name: 'Chroma', zone: '3-1', x: 6000, y: 7511, company: 'EIC', enemy: true },
   ];
 
-  // Base de datos de naves. Para añadir una nave basta con añadir una entrada aquí;
-  // sus ranuras de láser se crean automáticamente.
-  const SHIPS = {
-    PHOENIX: { name: 'Phoenix', hp: 104000, speed: 320, slots: 1, missSlots: 1, genSlots: 1, extraSlots: 1, cargo: 100,
-      engines: [{ x: -41, z: 9 }, { x: -41, z: -9 }], flame: { len: 22, w: 4 } },
-    LIBERATOR: { name: 'Liberator', hp: 116000, speed: 300, slots: 4, missSlots: 1, genSlots: 6, extraSlots: 2, cargo: 400 },
-  };
+  // Naves: para añadir una nave basta con añadir una entrada en datos/naves.json; sus ranuras de láser se crean automáticamente
+  let SHIPS = {};
+  // Pasivas de las naves: solo se activan en mapas bajos (X-1 a X-4)
+  let LOW_MAP_PASSIVES = {};
   // Catálogo de extras: se carga de extras.json al arrancar. Si no se puede leer, no hay extras
   let EXTRAS = {};
-  // Base de datos de láseres. Son distintos de la munición.
-  const LASERS = {
-    LF1: { name: 'LF-1', damage: 65 },
-    LF2: { name: 'LF-2', damage: 140 },
-    LF3: { name: 'LF-3', damage: 175 },
-    LF4: { name: 'LF-4', damage: 200 },
-    // Daño variable: en cada disparo tira un valor entre min y damage (el máximo)
-    LF4X: { name: 'LF-4 Inestable', min: 128, damage: 220 },
-    // Cada láser de este tipo equipado sube la vida máxima un 0,5 %
-    LF4H: { name: 'LF-4 Hyperplasmoid', damage: 225, hpBonus: 0.005 },
-    // Cada láser de este tipo suma 5 de daño extra contra jugadores (no contra NPC)
-    LF4M: { name: 'LF-4 Magmadrill', damage: 230, playerBonus: 5 },
-    // Cada láser de este tipo suma 5 de daño extra contra NPC (no contra jugadores)
-    LF4P: { name: 'LF-4 Paritydrill', damage: 230, npcBonus: 5 },
-  };
-
-  // Base de datos de generadores de escudo. Absorben un porcentaje de cada golpe
-  // mientras les quede reserva de escudo.
-  const GENERATORS = {
-    SG3N_A01: { name: 'SG3N-A01', shield: 1000, absorb: 0.4 },
-    SG3N_A02: { name: 'SG3N-A02', shield: 2000, absorb: 0.5 },
-    SG3N_A03: { name: 'SG3N-A03', shield: 5000, absorb: 0.6 },
-    SG3N_B00: { name: 'SG3N-B00', shield: 9000, absorb: 0.7 },
-    SG3N_B01: { name: 'SG3N-B01', shield: 9500, absorb: 0.7 },
-    SG3N_B02: { name: 'SG3N-B02', shield: 10000, absorb: 0.8 },
-    SG3N_B03: { name: 'SG3N-B03', shield: 11450, absorb: 0.8 },
-  };
-
+  // Láseres: son distintos de la munición.
+  // LF4X: daño variable, en cada disparo tira un valor entre min y damage (el máximo).
+  // LF4H: cada láser de este tipo equipado sube la vida máxima un 0,5 %.
+  // LF4M: cada láser de este tipo suma 5 de daño extra contra jugadores (no contra NPC).
+  // LF4P: cada láser de este tipo suma 5 de daño extra contra NPC (no contra jugadores).
+  let LASERS = {};
+  // Generadores de escudo: absorben un porcentaje de cada golpe mientras les quede reserva de escudo
+  let GENERATORS = {};
   // Munición: el daño es el daño base del láser multiplicado por mult
-  const AMMO = {
-    LCB10:  { name: 'LCB-10',  mult: 1, cool: 0.25, speed: 900, life: 1.0, shots: 1, spread: 0, color: '#ff4d4d' },
-    MCB25:  { name: 'MCB-25',  mult: 2, cool: 0.25, speed: 900, life: 1.0, shots: 1, spread: 0, color: '#4da6ff' },
-    MCB50:  { name: 'MCB-50',  mult: 3, cool: 0.25, speed: 900, life: 1.0, shots: 1, spread: 0, color: '#4dff6a' },
-    UCB100: { name: 'UCB-100', mult: 4, cool: 0.25, speed: 900, life: 1.0, shots: 1, spread: 0, color: '#fff7c2' },
-    RSB75:  { name: 'RSB-75',  mult: 6, cool: 0.25, speed: 900, life: 1.0, shots: 1, spread: 0, color: '#ff9f1a' },
-  };
+  let AMMO = {};
   // Misiles: se seleccionan con su casilla y se disparan con Espacio. Daño fijo, sin dispersión.
   // Velocidad, tiempo de vida y color son provisionales.
-  const MISSILES = {
-    R310:    { name: 'R310',     dmg: 1000, cool: 1, speed: 700, life: 2.5, color: '#9be7ff' },
-    PLT2026: { name: 'PLT-2026', dmg: 2000, cool: 1, speed: 700, life: 2.5, color: '#7dd3fc' },
-    PLT2021: { name: 'PLT-2021', dmg: 4000, cool: 1, speed: 700, life: 2.5, color: '#38bdf8' },
-    PLT3030: { name: 'PLT-3030', dmg: 6000, cool: 1, speed: 700, life: 2.5, color: '#0ea5e9' },
-  };
+  let MISSILES = {};
   // Barra de acción principal por defecto: 10 casillas. La real de cada jugador está en g.bar y se guarda con la partida.
   // Una casilla de munición ataca al NPC fijado; una de misil sólo cambia el misil seleccionado
   const DEFAULT_BAR = [
@@ -502,6 +468,8 @@
     const at = spawn || respawnPoint();
     p.x = at.x; p.y = at.y;
     p.tx = null; p.ty = null; p.target = null; p.attacking = false;
+    refreshShield();
+    p.hp = Math.min(p.hp, maxHpNow());
     p.spawnT = SPAWN_PROTECT; p.combatT = 0; p.nazBroken = false;
     showBanner(g.zone.name);
   }
@@ -1095,7 +1063,7 @@
       s.absorb = Math.max(s.absorb, GENERATORS[id].absorb);
       return s;
     }, { max: 0, absorb: 0 });
-    return { max: st.max * (1 + boostBonus('shield')), absorb: st.absorb };
+    return { max: st.max * (1 + boostBonus('shield') + (passives().shield || 0)), absorb: st.absorb };
   }
 
   // Tras cambiar generadores: la capacidad nueva se llena al equipar y la reserva se ajusta al máximo
@@ -1138,10 +1106,27 @@
     return inv;
   }
 
+  // Mapas bajos: los de X-1 a X-4 (el segundo número del identificador del mapa)
+  function inLowMap() {
+    const n = Number(g.zone.id.split('-')[1]);
+    return n >= 1 && n <= 4;
+  }
+
+  // Pasivas de la nave activa en el mapa actual; vacío si no aplican
+  function passives() {
+    const pas = LOW_MAP_PASSIVES[g.shipId];
+    return pas && inLowMap() ? pas : {};
+  }
+
+  // Capacidad de carga de la bodega con las pasivas activas
+  function cargoCap() {
+    return SHIPS[g.shipId].cargo + (passives().cargo || 0);
+  }
+
   // Vida máxima con el bonus de los láseres equipados (p. ej. LF-4 Hyperplasmoid: +0,5 % cada uno)
   function maxHpNow() {
     const bonus = equipOf().reduce((sum, id) => sum + (id && LASERS[id].hpBonus ? LASERS[id].hpBonus : 0), 0);
-    return Math.floor(g.p.maxHp * (1 + bonus));
+    return Math.floor((g.p.maxHp + (passives().hp || 0)) * (1 + bonus));
   }
 
   // Hay al menos un láser equipado en la nave activa (las ranuras pueden quedar vacías)
@@ -1330,7 +1315,7 @@
       g.bullets.push({
         x: p.x + Math.cos(ang) * 18, y: p.y + Math.sin(ang) * 18,
         vx: Math.cos(ang) * a.speed, vy: Math.sin(ang) * a.speed,
-        life: a.life, dmg: Math.floor(laserDamage(target) * rnd(0.9, 1) * a.mult * (1 + boostBonus('lasers'))), color: a.color,
+        life: a.life, dmg: Math.floor(laserDamage(target) * rnd(0.9, 1) * a.mult * (1 + boostBonus('lasers')) * (1 + (passives().dmg || 0))), color: a.color,
         target,
       });
     }
@@ -1352,7 +1337,7 @@
     g.bullets.push({
       x: p.x + Math.cos(ang) * 18, y: p.y + Math.sin(ang) * 18,
       vx: Math.cos(ang) * m.speed, vy: Math.sin(ang) * m.speed,
-      life: m.life, dmg: Math.floor(m.dmg * (1 + boostBonus('missiles'))), color: m.color, missile: true,
+      life: m.life, dmg: Math.floor(m.dmg * (1 + boostBonus('missiles') + (passives().dmg || 0) + (passives().missileDmg || 0))), color: m.color, missile: true,
       homing: true, turn: 5, target: t,
     });
     spendBoost('missiles', 1);
@@ -1434,7 +1419,8 @@
 
     // Movimiento libre hacia el punto de clic, también mientras se ataca
     // Con el efecto del misil ralentizador, la velocidad baja durante unos segundos
-    const sp = (p.slowT > 0 ? p.speed * p.slowF : p.speed) * (1 + boostBonus('engine'));
+    const spd = p.speed + (passives().speed || 0);
+    const sp = (p.slowT > 0 ? spd * p.slowF : spd) * (1 + boostBonus('engine'));
     let wx = 0, wy = 0;
     if (p.tx !== null) {
       const dx = p.tx - p.x, dy = p.ty - p.y, d = Math.hypot(dx, dy);
@@ -1822,7 +1808,7 @@
     for (const [key, n] of Object.entries(items)) if (!(key in g.cargo)) g.refine[key] += n;
     const want = Object.fromEntries(Object.entries(items).filter(([key, n]) => key in g.cargo && n > 0));
     const total = Object.values(want).reduce((s, n) => s + n, 0);
-    const free = Math.max(0, SHIPS[g.shipId].cargo - Object.values(g.cargo).reduce((s, n) => s + n, 0));
+    const free = Math.max(0, cargoCap() - Object.values(g.cargo).reduce((s, n) => s + n, 0));
     if (total === 0) return { taken: 0, partial: false, rest: {} };
     if (free <= 0) return { taken: 0, partial: false, rest: want };
     const partial = total > free;
@@ -2300,10 +2286,11 @@
     if (p.dead) return;
     const cx = W / 2, cy = H / 2;
     const moving = Math.hypot(p.vx, p.vy) > 20;
+    const sprite = SHIPS[g.shipId].sprite ? PHOENIX_SPRITE : null;
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(p.angle);
-    if (!PHOENIX_SPRITE) {
+    if (!sprite) {
       if (moving) {
         ctx.fillStyle = '#ffb347';
         ctx.beginPath();
@@ -2319,14 +2306,14 @@
       ctx.stroke();
     }
     ctx.restore();
-    if (PHOENIX_SPRITE) {
+    if (sprite) {
       if (moving && SHIPS[g.shipId].engines) drawPhoenixFlames(cx, cy, p.angle);
       drawPhoenixSprite(cx, cy, p.angle);
     }
     if (repairActive) drawRepairBot(cx, cy);
     // Barras sobre la nave: la vida siempre; el escudo sólo si hay escudo equipado y le queda carga
     const bw = 40, bx = cx - bw / 2;
-    bar(bx, cy - 40, bw, 4, p.hp / p.maxHp, '#5dff8a');
+    bar(bx, cy - 40, bw, 4, p.hp / maxHpNow(), '#5dff8a');
     if (p.maxShield > 0 && p.shield > 0) bar(bx, cy - 46, bw, 3, p.shield / p.maxShield, '#5ac8ff');
     // Aviso mientras dura el efecto del misil ralentizador
     if (p.slowT > 0) {
@@ -2703,10 +2690,10 @@
     const nano = 0;   // nanocasco actual: sin implementar, siempre 0
     // Columna izquierda: casco, escudo y nanocasco (todavía sin implementar: 0)
     const left = [
-      { kind: 'hull', frac: p.hp / p.maxHp, value: formatNum(Math.ceil(p.hp)) },
+      { kind: 'hull', frac: p.hp / maxHpNow(), value: formatNum(Math.ceil(p.hp)) },
       { kind: 'shield', frac: p.maxShield ? p.shield / p.maxShield : 0, value: formatNum(Math.ceil(p.shield)) },
       // Nanocasco: su máximo es igual al casco de la nave. Sin implementar, siempre está a 0
-      { kind: 'nano', frac: nano / p.maxHp, value: formatNum(nano) },
+      { kind: 'nano', frac: nano / maxHpNow(), value: formatNum(nano) },
     ];
     // Columna derecha: tonelaje, velocidad máxima y configuración (sin implementar: 1)
     const right = [
@@ -4810,15 +4797,24 @@
   // Sprites 2,5D de la Phoenix: 32 frames de 11,25° cargados al arrancar. Sin ellos se dibuja el polígono de siempre
   let PHOENIX_SPRITE = null;
   function loadPhoenixSprite() {
-    return fetch('sprites/phoenix/frames.json')
+    return fetch('sprites/naves/phoenix/frames.json')
       .then(r => r.json())
       .then(data => Promise.all(data.frames.map(f => new Promise((resolve, reject) => {
         const img = new Image();
         img.onload = () => resolve(img);
         img.onerror = reject;
-        img.src = 'sprites/phoenix/' + f.file;
+        img.src = 'sprites/naves/phoenix/' + f.file;
       }))).then(imgs => { PHOENIX_SPRITE = { frames: imgs, pivot: data.pivot, count: imgs.length, tilt: data.tiltDeg * Math.PI / 180 }; }))
       .catch(() => {});
+  }
+
+  // Naves, pasivas, láseres, generadores, munición y misiles: sin ellos no hay juego, así que un fallo se muestra como servidor no disponible
+  function loadEquipo() {
+    const cargar = archivo => fetch('datos/' + archivo).then(r => r.json());
+    return Promise.all([cargar('naves.json'), cargar('pasivas-naves.json'), cargar('laseres.json'), cargar('generadores.json'), cargar('municion.json'), cargar('misiles.json')])
+      .then(([naves, pasivas, laseres, generadores, municion, misiles]) => {
+        SHIPS = naves; LOW_MAP_PASSIVES = pasivas; LASERS = laseres; GENERATORS = generadores; AMMO = municion; MISSILES = misiles;
+      });
   }
 
   // Catálogo de misiones: sin misiones.json no hay misiones, pero el juego sigue
@@ -4829,8 +4825,8 @@
       .catch(() => {});
   }
 
-  // El botón de entrar se activa cuando el progreso y los catálogos de extras y misiones están cargados
-  Promise.all([readSave(), loadExtras(), loadMissions(), loadPhoenixSprite()]).then(([d]) => {
+  // El botón de entrar se activa cuando el progreso, el equipo y los catálogos de extras y misiones están cargados
+  Promise.all([readSave(), loadEquipo(), loadExtras(), loadMissions(), loadPhoenixSprite()]).then(([d]) => {
     if (!loadGame(d)) reset();
     addEventListener('pagehide', saveGame);
     const entrar = document.getElementById('entrar');

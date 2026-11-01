@@ -1,0 +1,10 @@
+{
+  "LEONOV": {
+    "hp": 96000,
+    "cargo": 500,
+    "speed": 20,
+    "dmg": 0.5,
+    "missileDmg": 1,
+    "shield": 1
+  }
+}

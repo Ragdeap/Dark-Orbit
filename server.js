@@ -14,7 +14,8 @@ const GAME = path.join(ROOT, 'dark-orbit.html');
 const RANKS_DIR = path.join(ROOT, 'rangos');
 const COMPANIES_DIR = path.join(ROOT, 'empresas');
 const SOUNDS_DIR = path.join(ROOT, 'sonidos');
-const PHOENIX_DIR = path.join(ROOT, 'sprites', 'phoenix');
+const SPRITES_DIR = path.join(ROOT, 'sprites');
+const DATOS_DIR = path.join(ROOT, 'datos');
 const EXTRAS_FILE = path.join(ROOT, 'extras.json');
 const MISSIONS_FILE = path.join(ROOT, 'misiones.json');
 const DATA_DIR = path.join(ROOT, 'data');
@@ -29,7 +30,8 @@ function staticFile(pathname) {
   const dir = path.dirname(file), ext = path.extname(file);
   if ((dir === RANKS_DIR || dir === COMPANIES_DIR) && ext === '.svg') return file;
   if (dir === SOUNDS_DIR && ext === '.opus') return file;
-  if (dir === PHOENIX_DIR && (ext === '.png' || ext === '.json')) return file;
+  if (dir === DATOS_DIR && ext === '.json') return file;
+  if (file.startsWith(SPRITES_DIR + path.sep) && (ext === '.png' || ext === '.json')) return file;
   return null;
 }
 

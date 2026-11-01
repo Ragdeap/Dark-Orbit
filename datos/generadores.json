@@ -1,0 +1,37 @@
+{
+  "SG3N_A01": {
+    "name": "SG3N-A01",
+    "shield": 1000,
+    "absorb": 0.4
+  },
+  "SG3N_A02": {
+    "name": "SG3N-A02",
+    "shield": 2000,
+    "absorb": 0.5
+  },
+  "SG3N_A03": {
+    "name": "SG3N-A03",
+    "shield": 5000,
+    "absorb": 0.6
+  },
+  "SG3N_B00": {
+    "name": "SG3N-B00",
+    "shield": 9000,
+    "absorb": 0.7
+  },
+  "SG3N_B01": {
+    "name": "SG3N-B01",
+    "shield": 9500,
+    "absorb": 0.7
+  },
+  "SG3N_B02": {
+    "name": "SG3N-B02",
+    "shield": 10000,
+    "absorb": 0.8
+  },
+  "SG3N_B03": {
+    "name": "SG3N-B03",
+    "shield": 11450,
+    "absorb": 0.8
+  }
+}

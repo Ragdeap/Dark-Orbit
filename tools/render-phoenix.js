@@ -1,5 +1,5 @@
 // Genera los 32 frames 2,5D de la nave Phoenix a partir de primitivas geométricas.
-// Uso: node tools/render-phoenix.js [--tilt 35] [--out sprites/phoenix]
+// Uso: node tools/render-phoenix.js [--tilt 35] [--out sprites/naves/phoenix]
 // Cámara ortográfica con inclinación hacia el suelo, luz fija desde arriba-izquierda y z-buffer.
 const fs = require('fs');
 const path = require('path');
@@ -19,7 +19,7 @@ function arg(name, def) {
 }
 const TILT_DEG = Number(arg('--tilt', 35));
 const TILT = TILT_DEG * Math.PI / 180;
-const OUT = path.join(ROOT, arg('--out', 'sprites/phoenix'));
+const OUT = path.join(ROOT, arg('--out', 'sprites/naves/phoenix'));
 
 // Base de la cámara: R = derecha en pantalla, U = arriba en pantalla, C = hacia la cámara
 const CE = Math.cos(TILT), SE = Math.sin(TILT);

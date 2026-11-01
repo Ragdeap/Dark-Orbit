@@ -1,0 +1,113 @@
+{
+  "PHOENIX": {
+    "name": "Phoenix",
+    "category": "Nave de introducción",
+    "subcategory": "Nave de prácticas",
+    "hp": 104000,
+    "speed": 320,
+    "slots": 1,
+    "missSlots": 1,
+    "genSlots": 1,
+    "extraSlots": 1,
+    "cargo": 100,
+    "sprite": true,
+    "engines": [
+      {
+        "x": -41,
+        "z": 9
+      },
+      {
+        "x": -41,
+        "z": -9
+      }
+    ],
+    "flame": {
+      "len": 22,
+      "w": 4
+    }
+  },
+  "LIBERATOR": {
+    "name": "Liberator",
+    "category": "Nave de introducción",
+    "subcategory": "Nave de transporte / escolta ligera",
+    "hp": 116000,
+    "speed": 300,
+    "slots": 4,
+    "missSlots": 1,
+    "genSlots": 6,
+    "extraSlots": 2,
+    "cargo": 400
+  },
+  "PIRANHA": {
+    "name": "Piranha",
+    "category": "Naves Especializadas de Gama Media",
+    "subcategory": "Interceptora",
+    "hp": 164000,
+    "speed": 360,
+    "slots": 6,
+    "missSlots": 1,
+    "genSlots": 8,
+    "extraSlots": 2,
+    "cargo": 600
+  },
+  "NOSTROMO": {
+    "name": "Nostromo",
+    "category": "Naves Especializadas de Gama Media",
+    "subcategory": "Caza de Apoyo Táctico",
+    "hp": 220000,
+    "speed": 340,
+    "slots": 7,
+    "missSlots": 1,
+    "genSlots": 10,
+    "extraSlots": 3,
+    "cargo": 700
+  },
+  "BIGBOY": {
+    "name": "Bigboy",
+    "category": "Naves Especializadas de Gama Media",
+    "subcategory": "Mini-Acorazado",
+    "hp": 260000,
+    "speed": 260,
+    "slots": 8,
+    "missSlots": 1,
+    "genSlots": 15,
+    "extraSlots": 3,
+    "cargo": 800
+  },
+  "LEONOV": {
+    "name": "Leonov",
+    "category": "Naves Especializadas de Gama Media",
+    "subcategory": "Especialista de Mapas Bajos",
+    "hp": 164000,
+    "speed": 360,
+    "slots": 6,
+    "missSlots": 1,
+    "genSlots": 6,
+    "extraSlots": 1,
+    "cargo": 500
+  },
+  "VENGEANCE": {
+    "name": "Vengeance",
+    "category": "Naves de Especialización Avanzada",
+    "subcategory": "Caza de Asalto",
+    "hp": 1000,
+    "speed": 380,
+    "slots": 10,
+    "missSlots": 1,
+    "genSlots": 10,
+    "extraSlots": 2,
+    "cargo": 1000
+  },
+  "GOLIATH": {
+    "name": "Goliath",
+    "category": "Naves de Especialización Avanzada",
+    "subcategory": "Acorazado de Batalla",
+    "hp": 356000,
+    "speed": 300,
+    "slots": 15,
+    "missSlots": 1,
+    "genSlots": 15,
+    "extraSlots": 3,
+    "cargo": 1500
+  }
+}
