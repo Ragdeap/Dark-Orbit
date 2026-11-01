@@ -254,9 +254,9 @@
   const ALIEN = {
     // passive: solo atacan si se les dispara. flee: huyen al bajar a esa fracción de vida.
     // pem: al bajar a esa fracción de vida hay una tirada (chance) en la que lanzan un PEM que quita el objetivo fijado por la nave.
-    streuner: { name: 'Streuner', sides: 4, r: 16, hp: 800,  shield: 400,  speed: 280, dmg: 20, range: 260, aggro: 350, cool: 1.6, shots: 1, rewards: { exp: 400, honor: 2, credits: 400, uridium: 1, cargo: { prometium: 10, terbium: 10 } }, maps: STREUNER_MAPS, color: '#e0553f', passive: true },
+    streuner: { name: 'Streuner', sides: 4, r: 16, hp: 800,  shield: 400,  speed: 280, dmg: 20, range: 260, aggro: 350, cool: 1.6, shots: 1, rewards: { exp: 400, honor: 2, credits: 400, uridium: 1, cargo: { prometium: 10, endurium: 10 } }, maps: STREUNER_MAPS, color: '#e0553f', passive: true },
     // Variantes del Streuner (alcance, cadencia y recompensa provisionales)
-    recruit:  { name: 'Recruit Streuner', sides: 4, r: 18, hp: 600,  shield: 800,  speed: 270, dmg: 40, range: 280, aggro: 380, cool: 1.4, shots: 1, rewards: { exp: 500, honor: 3, credits: 500, uridium: 2, cargo: { prometium: 12, terbium: 12 } }, maps: STREUNER_MAPS, color: '#e07a3f', flee: 0.2 },
+    recruit:  { name: 'Recruit Streuner', sides: 4, r: 18, hp: 600,  shield: 800,  speed: 270, dmg: 40, range: 280, aggro: 380, cool: 1.4, shots: 1, rewards: { exp: 500, honor: 3, credits: 600, uridium: 2, cargo: { prometium: 12, endurium: 12 } }, maps: STREUNER_MAPS, color: '#e07a3f', flee: 0.2 },
     // Sin velocidad propia: iguala la de la nave a la que asiste (ver escortOf)
     aider:    { name: 'Aider Streuner',   sides: 5, r: 15, hp: 1500, shield: 1000, speed: null, escort: true, dmg: 70, range: 320, aggro: 300, cool: 2.0, shots: 1, rewards: { exp: 700, honor: 4, credits: 700, uridium: 2, cargo: { prometium: 15, terbium: 15 } }, maps: STREUNER_MAPS, color: '#6fd3a0', passive: true },
     // Solo en los mapas X-2. Alcance, detección, cadencia y tipo son provisionales
