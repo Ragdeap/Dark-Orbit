@@ -1,0 +1,6 @@
+{
+  "REP1": { "name": "REP-1", "type": "active", "repair": { "seconds": 165 } },
+  "REP2": { "name": "REP-2", "type": "active", "repair": { "seconds": 120 } },
+  "REP3": { "name": "REP-3", "type": "active", "repair": { "seconds": 105 } },
+  "REP4": { "name": "REP-4", "type": "active", "repair": { "seconds": 90 } }
+}

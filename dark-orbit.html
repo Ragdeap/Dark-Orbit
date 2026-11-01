@@ -212,8 +212,8 @@
     PHOENIX: { name: 'Phoenix', hp: 104000, speed: 320, slots: 1, missSlots: 1, genSlots: 1, extraSlots: 1, cargo: 100 },
     LIBERATOR: { name: 'Liberator', hp: 116000, speed: 300, slots: 4, missSlots: 1, genSlots: 6, extraSlots: 2, cargo: 400 },
   };
-  // Extras de la nave. Catálogo vacío de momento: se añadirán cuando se definan
-  const EXTRAS = {};
+  // Catálogo de extras: se carga de extras.json al arrancar. Si no se puede leer, no hay extras
+  let EXTRAS = {};
   // Base de datos de láseres. Son distintos de la munición.
   const LASERS = {
     LF1: { name: 'LF-1', damage: 65 },
@@ -265,8 +265,10 @@
     { missile: 'R310' }, { missile: 'PLT2026' }, { missile: 'PLT2021' }, { missile: 'PLT3030' }, null,
   ];
   // Segunda barra desplegable: sección de categorías. De momento sólo láseres y misiles, sin texto; el resto de casillas vacías
-  const BAR_EXTRA = [{ category: 'laser' }, { category: 'missile' }, ...Array(8).fill(null)];
-  const CATEGORY_NAMES = { laser: 'Láseres', missile: 'Misiles' };
+  // La octava casilla es la de CPUs, donde aparecen los robots de reparación equipados
+  const BAR_EXTRA = [{ category: 'laser' }, { category: 'missile' }, ...Array(5).fill(null), { category: 'cpu' }, null, null];
+  const CATEGORY_NAMES = { laser: 'Láseres', missile: 'Misiles', cpu: 'CPUs' };
+  const REPAIR_COLOR = '#7fe7b0';
   const BAR_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'];
   const SLOT = 60, GAP = 8;
 
@@ -344,7 +346,7 @@
         damage: 0, cool: 0, ammo: 'LCB10', missile: null, missCool: 0,  // damage: bonus de las mejoras, se suma al de los láseres
         target: null, tx: null, ty: null, dead: false,
         attacking: false, rank: null, company: 'VRU', slowT: 0, slowF: 1,
-        spawnT: 0, combatT: 0, nazBroken: false, invulT: 0,
+        spawnT: 0, combatT: 0, nazBroken: false, invulT: 0, calmT: 0,
       },
       up: { dmg: 0, hp: 0, spd: 0 },
       zi: 0, zone: ZONES[0],
@@ -361,14 +363,14 @@
       playerOpen: false, playerPos: null, playerId: String(Math.floor(10000000 + Math.random() * 90000000)),
       teleportBonus: 0, lootKeys: 0,
       safeT: 0, wasSafe: false, clock: 0, lastSpot: -Infinity,
-      radT: 0, radTicks: 0,
+      radT: 0, radTicks: 0, repairId: null,
       boost: Object.fromEntries(BOOST_SLOTS.map(s => [s, { key: null, left: 0 }])),
       shipId: 'PHOENIX',
       equip: { PHOENIX: ['LF1'] },
       generators: {},
       missiles: {},
       extras: {},
-      inv: { lasers: { LF1: 1 }, generators: {}, missiles: {}, extras: {}, ships: { PHOENIX: 1 } },
+      inv: { lasers: { LF1: 1 }, generators: {}, missiles: {}, extras: { REP1: 1 }, ships: { PHOENIX: 1 } },
       hangar: { open: false, sel: { type: 'laser', i: 0 } },
       allies: BOTS.map((b, i) => ({
         id: i, name: b.name, zi: ZONES.findIndex(z => z.id === b.zone), exp: 0, honor: 0,
@@ -435,6 +437,7 @@
   const NAZ_RANGE = 720;      // radio de la zona de no ataque: 6 celdas del minimapa (120 unidades por celda)
   const SPAWN_PROTECT = 15;   // segundos de protección tras cruzar un portal
   const COMBAT_TIME = 8;      // segundos de combate tras una acción hostil o un golpe recibido
+  const REPAIR_GRACE = 10;    // segundos sin recibir daño ni atacar antes de poder usar un robot de reparación
   // Reaparición tras morir: base (gratis), portal más cercano o lugar de la muerte
   const REVIVE_PORTAL_COST = 500, REVIVE_SPOT_COST = 1500;
   const REVIVE_STREAK = 300;  // segundos: repetir la reaparición en el lugar de la muerte dentro de este plazo duplica su coste
@@ -465,6 +468,7 @@
     const p = g.p;
     p.spawnT = 0;
     p.combatT = COMBAT_TIME;
+    p.calmT = REPAIR_GRACE;
     p.invulT = 0;
     if (inNaz()) p.nazBroken = true;
   }
@@ -730,6 +734,7 @@
   function hurt(d, radiation = false) {
     const p = g.p;
     if (p.dead || p.invulT > 0) return;
+    p.calmT = REPAIR_GRACE;
     if (!radiation) {
       p.combatT = COMBAT_TIME;
       g.hitFlash = 0.12;
@@ -746,6 +751,74 @@
       g.honor -= Math.floor(g.honor * DEATH_HONOR_LOSS);
       explode(p.x, p.y, 22, '#7fd6ff');
     }
+  }
+
+  // Activa un robot de reparación equipado: solo fuera de combate y con la vida no completa.
+  // Cura el total de la vida en "seconds" segundos
+  function startRepair(id) {
+    const ex = EXTRAS[id];
+    if (!ex || !ex.repair || !extraOf().includes(id)) return false;
+    if (g.p.dead || g.p.calmT > 0 || g.p.hp >= maxHpNow()) return false;
+    g.repairId = id;
+    return true;
+  }
+
+  // Sonido de reparación: un tono suave que pulsa en cada tick (REPAIR_POP) mientras el robot cura, y calla al terminar
+  let repairNode = null;
+  function startRepairSound() {
+    if (repairNode || !audioCtx) return;
+    const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = 440;
+    gain.gain.value = 0;
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    repairNode = { osc, gain };
+  }
+  function stopRepairSound() {
+    if (!repairNode || !audioCtx) return;
+    const { osc, gain } = repairNode;
+    repairNode = null;
+    gain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05);
+    osc.stop(audioCtx.currentTime + 0.3);
+  }
+  function repairPulse() {
+    if (!repairNode) return;
+    const t = audioCtx.currentTime, gain = repairNode.gain.gain;
+    gain.cancelScheduledValues(t);
+    gain.setValueAtTime(0, t);
+    gain.linearRampToValueAtTime(0.015, t + 0.15);
+    gain.linearRampToValueAtTime(0, t + 0.5);
+  }
+
+  // Cura mientras el robot esté activo. Cualquier daño o ataque lo corta
+  // Cada tick (REPAIR_POP) sale un número verde con lo curado en ese tiempo
+  const REPAIR_POP = 2;     // segundos entre números verdes
+  let repairClock = 0, repairAcc = 0;
+  let repairActive = false;   // true mientras el robot está curando, para dibujarlo junto a la nave
+  function updateRepair(dt) {
+    const p = g.p;
+    if (!g.repairId) { repairClock = 0; repairAcc = 0; repairActive = false; stopRepairSound(); return; }
+    const ex = EXTRAS[g.repairId];
+    if (!ex || !ex.repair || !extraOf().includes(g.repairId) || p.dead || p.calmT > 0 || p.hp >= maxHpNow()) {
+      g.repairId = null;
+      repairClock = 0; repairAcc = 0;
+      repairActive = false;
+      stopRepairSound();
+      return;
+    }
+    repairActive = true;
+    startRepairSound();
+    const heal = Math.min(maxHpNow() - p.hp, maxHpNow() * dt / ex.repair.seconds);
+    p.hp += heal;
+    repairAcc += heal;
+    repairClock += dt;
+    if (repairClock < REPAIR_POP) return;
+    repairClock -= REPAIR_POP;
+    spawnText(0, -30, '+' + Math.round(repairAcc), '#5dff8a', true);
+    repairPulse();
+    repairAcc = 0;
   }
 
   // Porcentaje de vida máxima que quita cada pulso de radiación (tick número "tick", desde 1): 1 % al inicio,
@@ -1136,11 +1209,13 @@
     if (!p.dead) updatePlayer(dt);
     tickBoosts(dt);
     updateRadiation(dt);
+    updateRepair(dt);
 
     // Protección de llegada: se corta al salir del anillo. El combate se agota solo y devuelve la protección
     if (p.spawnT > 0 && !inNaz()) p.spawnT = 0;
     p.spawnT = Math.max(0, p.spawnT - dt);
     p.combatT = Math.max(0, p.combatT - dt);
+    p.calmT = Math.max(0, p.calmT - dt);
     if (p.combatT <= 0) p.nazBroken = false;
     p.invulT = Math.max(0, p.invulT - dt);
 
@@ -1979,6 +2054,27 @@
     }
   }
 
+  // Robot de reparación: una pieza pequeña que orbita la nave mientras cura, con un destello verde hacia ella
+  function drawRepairBot(cx, cy) {
+    const t = performance.now();
+    const a = t / 600;
+    const x = cx + Math.cos(a) * 30, y = cy + Math.sin(a) * 16 - 6;
+    ctx.save();
+    ctx.fillStyle = '#c9d6e3';
+    ctx.strokeStyle = '#5dff8a';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#5dff8a';
+    ctx.globalAlpha = 0.5 + 0.5 * Math.sin(t / 120);
+    ctx.beginPath();
+    ctx.arc(x + (cx - x) * 0.3, y + (cy - y) * 0.3, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
   function drawPlayer() {
     const p = g.p;
     if (p.dead) return;
@@ -2000,6 +2096,7 @@
     ctx.lineWidth = 1.5;
     ctx.stroke();
     ctx.restore();
+    if (repairActive) drawRepairBot(cx, cy);
     // Barras sobre la nave: la vida siempre; el escudo sólo si hay escudo equipado y le queda carga
     const bw = 40, bx = cx - bw / 2;
     bar(bx, cy - 30, bw, 4, p.hp / p.maxHp, '#5dff8a');
@@ -3258,6 +3355,10 @@
 
   // Lo que muestra el rótulo de una casilla de la barra principal: nombre, cantidad y efecto
   function barItemLines(item) {
+    if (item.repair) {
+      const ex = EXTRAS[item.repair];
+      return [`Robot de reparación: ${ex.name}`, `Repara la vida en ${ex.repair.seconds} s`, 'Solo fuera de combate'];
+    }
     if (item.ammo) {
       const a = AMMO[item.ammo];
       return [`Tipo de láser: ${a.name}`, 'Cantidad: ∞', `Efecto: daño láser multiplicado por ${a.mult}`];
@@ -3315,7 +3416,7 @@
   // Casilla con el contenido de un objeto, centrada en (cx, cy)
   function drawBarGhost(cx, cy, item, alpha) {
     const x = cx - SLOT / 2, y = cy - SLOT / 2;
-    const o = item.ammo ? AMMO[item.ammo] : MISSILES[item.missile];
+    const o = item.ammo ? AMMO[item.ammo] : item.repair ? { name: EXTRAS[item.repair].name, color: REPAIR_COLOR } : MISSILES[item.missile];
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.fillStyle = 'rgba(12,24,48,0.92)';
@@ -3366,16 +3467,22 @@
       const it = Array.isArray(list) ? list[i] : null;
       if (it && it.ammo && AMMO[it.ammo]) return { ammo: it.ammo };
       if (it && it.missile && MISSILES[it.missile]) return { missile: it.missile };
+      if (it && it.repair && EXTRAS[it.repair] && EXTRAS[it.repair].repair) return { repair: it.repair };
       return null;
     });
   }
 
   // Objetos de la categoría abierta: todos los láseres o todos los misiles, en el orden de su tabla
   function barSubRow() {
-    const items = g.barCat === 'laser'
-      ? Object.keys(AMMO).map(ammo => ({ ammo }))
-      : Object.keys(MISSILES).map(missile => ({ missile }));
+    const items = g.barCat === 'laser' ? Object.keys(AMMO).map(ammo => ({ ammo }))
+      : g.barCat === 'missile' ? Object.keys(MISSILES).map(missile => ({ missile }))
+      : equippedRepairs().map(repair => ({ repair }));
     return [...items, ...Array(10 - items.length).fill(null)];
+  }
+
+  // Robots de reparación equipados en la nave actual; en la sección de CPUs solo aparecen estos
+  function equippedRepairs() {
+    return extraOf().filter(id => id && EXTRAS[id] && EXTRAS[id].repair);
   }
 
   // Una fila de 10 casillas. `keys`: muestra el número de la tecla que la activa
@@ -3388,6 +3495,7 @@
       const a = id ? AMMO[id] : null;
       const mid = item && item.missile;
       const m = mid ? MISSILES[mid] : null;
+      const rep = item && item.repair ? EXTRAS[item.repair] : null;
       const selected = (a && g.p.ammo === id) || (m && g.p.missile === mid);
       ctx.fillStyle = 'rgba(12,24,48,0.92)';
       ctx.fillRect(x, y0, SLOT, SLOT);
@@ -3398,7 +3506,8 @@
       if (item && item.category) {
         const cx = x + SLOT / 2, cy = y0 + SLOT / 2;
         if (item.category === 'laser') drawLaserIcon(cx, cy);
-        else drawMissileIcon(cx, cy);
+        else if (item.category === 'missile') drawMissileIcon(cx, cy);
+        else drawCpuIcon(cx, cy);
         continue;
       }
       if (keys) {
@@ -3423,8 +3532,37 @@
         ctx.textAlign = 'center';
         ctx.fillText(m.name, x + SLOT / 2, y0 + 42);
       }
+      if (rep) {
+        ctx.fillStyle = REPAIR_COLOR;
+        ctx.fillRect(x + SLOT / 2 - 12, y0 + 20, 24, 4);
+        ctx.fillStyle = '#e6f2ff';
+        ctx.font = '11px Consolas, monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(rep.name, x + SLOT / 2, y0 + 42);
+      }
     }
     ctx.textAlign = 'left';
+  }
+
+  // Icono de CPUs: chip con sus patillas
+  function drawCpuIcon(cx, cy) {
+    ctx.save();
+    ctx.strokeStyle = REPAIR_COLOR;
+    ctx.shadowColor = REPAIR_COLOR;
+    ctx.shadowBlur = 6;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(cx - 9, cy - 9, 18, 18);
+    ctx.beginPath();
+    for (const k of [-5, 0, 5]) {
+      ctx.moveTo(cx + k, cy - 9); ctx.lineTo(cx + k, cy - 13);
+      ctx.moveTo(cx + k, cy + 9); ctx.lineTo(cx + k, cy + 13);
+      ctx.moveTo(cx - 9, cy + k); ctx.lineTo(cx - 13, cy + k);
+      ctx.moveTo(cx + 9, cy + k); ctx.lineTo(cx + 13, cy + k);
+    }
+    ctx.stroke();
+    ctx.fillStyle = REPAIR_COLOR;
+    ctx.fillRect(cx - 4, cy - 4, 8, 8);
+    ctx.restore();
   }
 
   // Icono de láseres: dos haces paralelos con brillo y un punto de disparo
@@ -3951,6 +4089,7 @@
   function useSlot(i) {
     const item = g.bar[i];
     if (!item) return;
+    if (item.repair) { startRepair(item.repair); return; }
     if (item.missile) g.p.missile = item.missile;
     if (!item.ammo) return;
     if (g.p.attacking && g.p.ammo === item.ammo) { g.p.attacking = false; return; }
@@ -3962,6 +4101,8 @@
   // (láser: ataca al NPC fijado; misil: lo dispara contra el NPC fijado)
   function pickBarItem(item, dbl) {
     if (!item) return;
+    // Un robot de reparación se activa con un clic; no cambia la munición ni el misil
+    if (item.repair) { startRepair(item.repair); return; }
     if (item.ammo) g.p.ammo = item.ammo;
     if (item.missile) g.p.missile = item.missile;
     if (!dbl || g.p.dead) return;
@@ -4056,6 +4197,8 @@
     g.shipId = d.shipId; g.equip = d.equip; g.generators = d.generators; g.missiles = d.missiles || {}; g.extras = d.extras || {};
     // Las partidas guardadas antes de un tipo de inventario (p. ej. naves) reciben lo que les falte a partir de lo equipado
     g.inv = { ...inventoryFrom(d.equip, d.generators || {}, d.shipId, d.missiles || {}, d.extras || {}), ...d.inv };
+    // Todo jugador tiene el robot de reparación básico (REP1), también en las partidas que no lo tenían
+    g.inv.extras.REP1 = Math.max(1, g.inv.extras.REP1 || 0);
     g.up = d.up; g.credits = d.credits; g.uridium = d.uridium; g.exp = d.exp; g.honor = d.honor;
     g.cargo = { ...g.cargo, ...d.cargo };
     g.refine = { ...g.refine, ...d.refine };
@@ -4137,8 +4280,15 @@
     requestAnimationFrame(frame);
   }
 
-  // El botón de entrar se activa cuando el progreso está cargado
-  readSave().then(d => {
+  function loadExtras() {
+    return fetch('extras.json')
+      .then(r => r.json())
+      .then(data => { EXTRAS = data; })
+      .catch(() => {});   // Sin catálogo: el juego sigue, sin extras
+  }
+
+  // El botón de entrar se activa cuando el progreso y el catálogo de extras están cargados
+  Promise.all([readSave(), loadExtras()]).then(([d]) => {
     if (!loadGame(d)) reset();
     addEventListener('pagehide', saveGame);
     const entrar = document.getElementById('entrar');
